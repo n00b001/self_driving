@@ -8,6 +8,7 @@ from grab_screen import grab_screen
 from x1_collect_data import resize
 from x2_train_net import get_model
 import numpy as np
+simulate = True
 
 def release_all():
     ReleaseKey(W)
@@ -17,6 +18,9 @@ def release_all():
 
 
 def press_label(label):
+    if simulate:
+        print(label)
+        return
     if label == "NO":
         release_all()
     elif label == "WA":
@@ -64,18 +68,25 @@ def press_label(label):
 def main(model_path):
     with open('label_to_index.pkl', 'rb') as f:
         label_to_index = pickle.load(f)
+    index_to_label = {v: k for (k, v) in label_to_index.items()}
     with open('image_count.pkl', 'rb') as f:
         image_count = pickle.load(f)
     model = get_model(num_classes=image_count, model_path=model_path)
     while True:
         screen = grab_screen()
         resized_screen = resize(screen)
-        resized_screen = resized_screen.astype("float")
+        resized_screen = resized_screen.astype("float32")
         resized_screen /= 255.0
-        resized_screen = np.expand_dims(resized_screen, axis=0)
-        output = model.predict({"x": resized_screen})
-        label = label_to_index[output[0]]
+        label = normalised_screen_to_label(index_to_label, model, resized_screen)
         press_label(label)
+
+
+def normalised_screen_to_label(index_to_label, model, resized_screen):
+    resized_screen = np.expand_dims(resized_screen, axis=0)
+    output = model.predict({"x": resized_screen})
+    output_list = list(output)
+    label = index_to_label[int(output_list[0])]
+    return label
 
 
 if __name__ == '__main__':
