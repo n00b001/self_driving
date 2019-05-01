@@ -4,7 +4,6 @@ import pickle
 import random
 
 import tensorflow as tf
-from tensorflow.contrib.learn import DNNClassifier
 from tensorflow.python.data.experimental import AUTOTUNE
 
 from consts import DATA_DIR, IMAGE_SIZE, BATCH_SIZE, MAX_TRAINING_STEPS, EPOCHS, MODEL_DIR, IMAGE_DEPTH, SHUFFLE_BUFFER
@@ -31,7 +30,7 @@ def get_model(num_classes, model_path=None):
 
     print("Model path: {}".format(model_path))
     feature_columns = [tf.feature_column.numeric_column("x", shape=[IMAGE_SIZE, IMAGE_SIZE, IMAGE_DEPTH])]
-    classifier = DNNClassifier(
+    classifier = tf.estimator.DNNClassifier(
         feature_columns=feature_columns,
         hidden_units=architecture,
         optimizer=tf.train.AdamOptimizer(1e-4),
@@ -51,7 +50,28 @@ def load_and_preprocess_image(path):
 def preprocess_image(image):
     image = tf.image.decode_jpeg(image, channels=3)
     image = tf.image.resize_images(image, [IMAGE_SIZE, IMAGE_SIZE])
-    image /= 255.0  # normalize to [0,1] range
+    image = tf.math.divide(image, 255)  # normalize to [0,1] range
+    # if bool(random.getrandbits(1)):
+    image = tf.image.random_flip_left_right(image)
+    image = tf.image.random_brightness(image, 100)
+    image = tf.image.random_contrast(image, 0, 100)
+    image = tf.image.random_hue(image, 0.5)
+    image = tf.image.random_jpeg_quality(image, 0, 100)
+    image = tf.image.random_saturation(image, 0, 100)
+    # if bool(random.getrandbits(1)):
+    #     image = tf.image.random_flip_up_down(image)
+    # if bool(random.getrandbits(1)):
+    #     image = tf.image.random_brightness(image)
+    # if bool(random.getrandbits(1)):
+    #     image = tf.image.random_contrast(image)
+    # if bool(random.getrandbits(1)):
+    #     image = tf.image.random_crop(image)
+    # if bool(random.getrandbits(1)):
+    #     image = tf.image.random_hue(image)
+    # if bool(random.getrandbits(1)):
+    #     image = tf.image.random_jpeg_quality(image)
+    # if bool(random.getrandbits(1)):
+    #     image = tf.image.random_saturation(image)
     return image
 
 
@@ -84,14 +104,15 @@ def get_dataset(is_training, model_path):
 
     if is_training:
         ds = ds.apply(tf.data.experimental.shuffle_and_repeat(buffer_size=SHUFFLE_BUFFER))
-        ds = ds.batch(BATCH_SIZE)
-        ds = ds.prefetch(buffer_size=AUTOTUNE)
-
-        ds = ds.make_one_shot_iterator()
-        ds = ds.get_next()
-        return ds
+        # ds = ds.batch(BATCH_SIZE)
+        # ds = ds.prefetch(buffer_size=AUTOTUNE)
+        #
+        # ds = ds.make_one_shot_iterator()
+        # ds = ds.get_next()
+        # return ds
+    # else:
     ds = ds.batch(BATCH_SIZE)
-    ds = ds.prefetch(buffer_size=AUTOTUNE)
+    ds = ds.prefetch(buffer_size=BATCH_SIZE)
     ds = ds.make_one_shot_iterator()
     ds = ds.get_next()
     return ds
@@ -102,14 +123,14 @@ def get_paths_and_count(data_root):
     all_image_paths = [str(path) for path in all_image_paths]
     random.shuffle(all_image_paths)
     image_count = len(all_image_paths)
-    print("Number of items: {}".format(image_count))
+    # print("Number of items: {}".format(image_count))
     return all_image_paths, image_count
 
 
 def train(model, model_path):
     for i in range(EPOCHS):
-        print("Starting epoch: {}".format(i))
-        model.fit(
+        print("Starting epoch: {}".format(i + 1))
+        model.train(
             input_fn=lambda: get_dataset(is_training=True, model_path=model_path),
             steps=MAX_TRAINING_STEPS
         )
