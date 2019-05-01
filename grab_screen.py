@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import win32con
 
-from consts import GAME_WIDTH, GAME_HEIGHT
+from consts import GAME_WIDTH, GAME_HEIGHT, IMAGE_SIZE
 
 game_x = 0
 game_y = 0
@@ -54,4 +54,7 @@ def grab_screen():
     win32gui.ReleaseDC(hwin, hwindc)
     win32gui.DeleteObject(bmp.GetHandle())
 
-    return img
+    # return img
+    colourized = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
+    return cv2.resize(colourized, (IMAGE_SIZE, IMAGE_SIZE))
+    # return img

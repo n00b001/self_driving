@@ -1,14 +1,19 @@
+import os
 import pickle
+import time
+
+import numpy as np
 
 from direct_keys import PressKey, ReleaseKey, W, A, S, D
 from grab_screen import grab_screen
-
-# def get_model(model_path):
-#     return predictor.from_saved_model(model_path)
-from x1_collect_data import resize
+from x1_collect_data import fps_stuff2
 from x2_train_net import get_model
-import numpy as np
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 simulate = True
+index_to_label = None
+model = None
+
 
 def release_all():
     ReleaseKey(W)
@@ -66,28 +71,35 @@ def press_label(label):
 
 
 def main(model_path):
-    with open('label_to_index.pkl', 'rb') as f:
+    global index_to_label, model
+    with open('./{}/label_to_index.pkl'.format(model_path), 'rb') as f:
         label_to_index = pickle.load(f)
     index_to_label = {v: k for (k, v) in label_to_index.items()}
-    with open('image_count.pkl', 'rb') as f:
+    with open('./{}/image_count.pkl'.format(model_path), 'rb') as f:
         image_count = pickle.load(f)
-    model = get_model(num_classes=image_count, model_path=model_path)
+    model, model_path = get_model(num_classes=image_count, model_path=model_path)
+
+    start_time = time.time()
+    x = 1  # displays the frame rate every 1 second
+    counter = 0
+
     while True:
-        screen = grab_screen()
-        resized_screen = resize(screen)
-        resized_screen = resized_screen.astype("float32")
-        resized_screen /= 255.0
-        label = normalised_screen_to_label(index_to_label, model, resized_screen)
+        label = normalised_screen_to_label()
         press_label(label)
+        counter, start_time = fps_stuff2(counter, start_time, x)
 
 
-def normalised_screen_to_label(index_to_label, model, resized_screen):
-    resized_screen = np.expand_dims(resized_screen, axis=0)
-    output = model.predict({"x": resized_screen})
-    output_list = list(output)
-    label = index_to_label[int(output_list[0])]
+def normalised_screen_to_label():
+    output = list(model.predict(input_fn=get_screen_dict))[0]
+    label = index_to_label[int(output)]
     return label
 
 
+def get_screen_dict():
+    return {"x": np.expand_dims(np.divide(grab_screen(), 255), axis=0)}
+
+
 if __name__ == '__main__':
-    main("./models/LBAUNNNGJX")
+    # main("./models/XUNKKNYMIA")
+    main("./models/TPSZVPRWSU")
+    # main("./models/XGNASUFHKW")
