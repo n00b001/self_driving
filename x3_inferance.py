@@ -75,9 +75,7 @@ def main(model_path):
     with open('./{}/label_to_index.pkl'.format(model_path), 'rb') as f:
         label_to_index = pickle.load(f)
     index_to_label = {v: k for (k, v) in label_to_index.items()}
-    with open('./{}/image_count.pkl'.format(model_path), 'rb') as f:
-        image_count = pickle.load(f)
-    model, model_path = get_model(num_classes=image_count, model_path=model_path)
+    model, model_path = get_model(num_classes=len(index_to_label), model_path=model_path)
 
     start_time = time.time()
     x = 1  # displays the frame rate every 1 second
