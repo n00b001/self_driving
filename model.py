@@ -12,12 +12,12 @@ QUEUE_SIZE = 40
 
 
 class Model:
-    def __init__(self, index_to_label, model_path=None, verbose=False):
+    def __init__(self, index_to_label, model_path=None, verbose=False, dropout=0.5):
         self.verbose = verbose
         self.index_to_label = index_to_label
         self.model_path = model_path
         self.model = self.get_model(
-            model_path=model_path, dropout=0.0, num_classes=len(self.index_to_label.keys())
+            model_path=model_path, dropout=dropout, num_classes=len(self.index_to_label.keys())
         )
         self.input_queue = Queue(maxsize=QUEUE_SIZE)
         self.output_queue = Queue(maxsize=QUEUE_SIZE)

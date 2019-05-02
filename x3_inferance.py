@@ -5,7 +5,6 @@ import numpy as np
 import tensorflow as tf
 
 from direct_keys import PressKey, ReleaseKey, W, A, S, D
-from grab_keys import grab_keys
 from grab_screen import grab_screen
 from model import Model
 from x1_collect_data import fps_stuff2
@@ -73,13 +72,14 @@ def press_label(label):
         PressKey(S)
         ReleaseKey(D)
 
+
 def main(_):
     model_path = "./models/VHAQJMFYIV"
     global index_to_label, model
     with open('./{}/label_to_index.pkl'.format(model_path), 'rb') as f:
         label_to_index = pickle.load(f)
     index_to_label = {v: k for (k, v) in label_to_index.items()}
-    model = Model(index_to_label, model_path=model_path)
+    model = Model(index_to_label, model_path=model_path, dropout=0.0)
     print("Number of labels: {}".format(len(label_to_index.keys())))
 
     start_time = time.time()
