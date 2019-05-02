@@ -55,7 +55,9 @@ class Model:
         self.input_queue.put(features)
         predictions = self.output_queue.get()
 
-        return predictions
+        output = predictions["class_ids"][0]
+        label = self.index_to_label[int(output)]
+        return label
 
     def get_model(self, num_classes, model_path=None, dropout=0.5):
         if model_path is None:

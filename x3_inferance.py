@@ -12,7 +12,7 @@ from x2_train_net import preprocess_image, to_dict
 
 simulate = True
 index_to_label = None
-model = None
+model: Model = None
 
 
 def release_all():
@@ -84,16 +84,9 @@ def main(_):
     counter = 0
 
     while True:
-        label = normalised_screen_to_label()
+        label = model.predict(get_screen_dict())
         press_label(label)
         counter, start_time = fps_stuff2(counter, start_time, x)
-
-
-def normalised_screen_to_label():
-    predictions = model.predict(get_screen_dict())
-    output = predictions["class_ids"][0]
-    label = index_to_label[int(output)]
-    return label
 
 
 def get_screen_dict():
@@ -102,7 +95,8 @@ def get_screen_dict():
         pre_processed = preprocess_image(image, training=False)
         pre_processed = tf.expand_dims(pre_processed, axis=0)
         return to_dict(pre_processed)
-    return {"x": np.expand_dims(np.divide(grab_screen(), 255), axis=0)}
+    # return {"x": np.expand_dims(np.divide(grab_screen(), 255), axis=0)}
+    return {"x": np.expand_dims(grab_screen(), axis=0)}
     # return {"x": np.zeros((1, 96, 96, 3), dtype=np.float32)}
 
 
