@@ -5,14 +5,15 @@ import numpy as np
 import tensorflow as tf
 
 from direct_keys import PressKey, ReleaseKey, W, A, S, D
+from grab_keys import grab_keys
 from grab_screen import grab_screen
 from model import Model
 from x1_collect_data import fps_stuff2
-from x2_train_net import preprocess_image, to_dict
 
 simulate = True
 index_to_label = None
 model: Model = None
+last_print_time = time.time()
 
 
 def release_all():
@@ -23,7 +24,10 @@ def release_all():
 
 
 def press_label(label):
-    print(label)
+    global last_print_time
+    if time.time() - last_print_time > 1:
+        last_print_time = time.time()
+        print(label)
     if simulate:
         return
     if label == "NO":
@@ -69,9 +73,8 @@ def press_label(label):
         PressKey(S)
         ReleaseKey(D)
 
-
 def main(_):
-    model_path = "./models/WRKHZOWXNC"
+    model_path = "./models/VHAQJMFYIV"
     global index_to_label, model
     with open('./{}/label_to_index.pkl'.format(model_path), 'rb') as f:
         label_to_index = pickle.load(f)
@@ -90,14 +93,7 @@ def main(_):
 
 
 def get_screen_dict():
-    if False:
-        image = tf.convert_to_tensor(grab_screen())
-        pre_processed = preprocess_image(image, training=False)
-        pre_processed = tf.expand_dims(pre_processed, axis=0)
-        return to_dict(pre_processed)
-    # return {"x": np.expand_dims(np.divide(grab_screen(), 255), axis=0)}
     return {"x": np.expand_dims(grab_screen(), axis=0)}
-    # return {"x": np.zeros((1, 96, 96, 3), dtype=np.float32)}
 
 
 if __name__ == '__main__':

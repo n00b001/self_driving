@@ -8,7 +8,7 @@ import tensorflow as tf
 from consts import MODEL_DIR, DEFAULT_ARCHITECTURE, IMAGE_SIZE, IMAGE_DEPTH
 from file_stuff import get_random_str
 
-QUEUE_SIZE = 180
+QUEUE_SIZE = 40
 
 
 class Model:

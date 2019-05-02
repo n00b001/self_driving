@@ -137,7 +137,7 @@ def main(_):
     print("Number of images: {}".format(num_images))
     print("Labels: {}".format(number_of_labels))
 
-    model = Model(number_of_labels)
+    model = Model(number_of_labels, mo)
     train(model)
     print("")
 
