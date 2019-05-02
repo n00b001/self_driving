@@ -41,7 +41,7 @@ def display_keys(keys):
 
 def main():
     start_time = time.time()
-    x = 1  # displays the frame rate every 1 second
+    x = 1
     counter = 0
 
     feature_data = []
@@ -53,9 +53,7 @@ def main():
         keys = grab_keys()
         handle_keys(keys)
         if not recording:
-            # display_screen(screen)
             display_screen(resized_screen)
-            # display_keys(keys)
         else:
             feature_data.append(resized_screen)
             target_data.append(keys)
@@ -63,7 +61,6 @@ def main():
                 save_to_files(feature_data, target_data)
                 feature_data = []
                 target_data = []
-        # frames, start = fps_stuff(fps_num, fps_total, frames, start)
         counter, start_time = fps_stuff2(counter, start_time, x)
 
 

@@ -3,12 +3,10 @@ import pathlib
 import pickle
 import random
 
-import numpy as np
 import tensorflow as tf
 from tensorflow.python.data.experimental import AUTOTUNE
 
 from consts import DATA_DIR, BATCH_SIZE, EPOCHS, SHUFFLE_BUFFER, MAX_TRAINING_STEPS
-from grab_screen import grab_screen
 from model import Model
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
@@ -23,9 +21,6 @@ def load_and_preprocess_image(path, training):
 
 
 def preprocess_image(image, training=True):
-    # image = tf.image.resize_images(image, [IMAGE_SIZE, IMAGE_SIZE])
-    # image = tf.math.divide(image, 255)  # normalize to [0,1] range
-
     if training:
         if random.random() < 0.1:
             image = tf.image.random_flip_left_right(image)
@@ -42,9 +37,7 @@ def preprocess_image(image, training=True):
     return image
 
 
-# The tuples are unpacked into the positional arguments of the mapped function
 def load_and_preprocess_from_path_label_train(path, label):
-    # return load_and_preprocess_image(path), label
     return to_dict(load_and_preprocess_image(path, True)), label
 
 
@@ -52,9 +45,7 @@ def to_dict(x):
     return {"x": x}
 
 
-# The tuples are unpacked into the positional arguments of the mapped function
 def load_and_preprocess_from_path_label_test(path, label):
-    # return load_and_preprocess_image(path), label
     return to_dict(load_and_preprocess_image(path, False)), label
 
 
@@ -80,7 +71,6 @@ def get_dataset(is_training, model_path):
             batch_size=BATCH_SIZE,
             num_parallel_batches=os.cpu_count(),
         ))
-        # ds = ds.repeat()
     else:
         ds = ds.apply(tf.data.experimental.map_and_batch(
             map_func=load_and_preprocess_from_path_label_test,
@@ -124,14 +114,6 @@ def get_paths_and_count():
 def train(model: Model):
     for i in range(EPOCHS):
         print("Starting epoch: {}".format(i + 1))
-        # model.train(
-        #     input_fn=lambda: get_dataset(is_training=True, model_path=model_path),
-        #     steps=MAX_TRAINING_STEPS
-        # )
-        # print("Evaluating...")
-        # stats = model.evaluate(
-        #     input_fn=lambda: get_dataset(is_training=False, model_path=model_path)
-        # )
         train_spec = tf.estimator.TrainSpec(
             input_fn=lambda: get_dataset(is_training=True, model_path=model.model_path),
             max_steps=MAX_TRAINING_STEPS,
@@ -143,40 +125,6 @@ def train(model: Model):
         )
         stats = tf.estimator.train_and_evaluate(model.model, train_spec, eval_spec)
         print("Stats: {}".format(stats))
-
-        # feature_spec = tf.feature_column.make_parse_example_spec(feature_columns)
-
-        # x = {"x": tf.placeholder(shape=[None, IMAGE_SIZE, IMAGE_SIZE, IMAGE_DEPTH], dtype=tf.float32, name="x")}
-        # # serving_input_receiver_fn = tf.estimator.export.build_parsing_serving_input_receiver_fn(x)
-        # serving_input_receiver_fn = tf.estimator.export.build_raw_serving_input_receiver_fn(features=x)
-        # receiver_tensor = {
-        #     "receiver": x
-        # }
-        # features = {
-        #     'feature': tf.image.resize_images(receiver_tensor['x'], [IMAGE_SIZE, IMAGE_SIZE])
-        # }
-        # print("Saving as SavedModel...")
-        # model.export_savedmodel(
-        #     model_path,
-        #     lambda: tf.estimator.export.ServingInputReceiver(features, receiver_tensor),
-        #     # strip_default_attrs=True,
-        #     as_text=True
-        # )
-        # tf.get_variable_scope().reuse_variables()
-        # predictions = model.predict(input_fn=get_screen_dict)  # , yield_single_examples=True)
-        # output = list(predictions)[0]
-        # label = index_to_label[int(output)]
-        # return label
-
-#
-# def get_screen_dict():
-#     if False:
-#         image = tf.convert_to_tensor(grab_screen())
-#         pre_processed = preprocess_image(image, training=False)
-#         pre_processed = tf.expand_dims(pre_processed, axis=0)
-#         return to_dict(pre_processed)
-#     # return {"x": np.expand_dims(np.divide(grab_screen(), 255), axis=0)}
-#     return {"x": np.expand_dims(np.zeros((96, 96, 3), dtype=np.float32), axis=0)}, None
 
 
 def main(_):
@@ -190,12 +138,10 @@ def main(_):
     print("Labels: {}".format(number_of_labels))
 
     model = Model(number_of_labels)
-    # model, model_path = get_model(len(number_of_labels.keys()))
     train(model)
     print("")
 
 
 if __name__ == '__main__':
-    # main()
     tf.logging.set_verbosity(tf.logging.INFO)
     tf.app.run(main)

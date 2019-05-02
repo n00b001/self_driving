@@ -8,7 +8,7 @@ import tensorflow as tf
 from consts import MODEL_DIR, DEFAULT_ARCHITECTURE, IMAGE_SIZE, IMAGE_DEPTH
 from file_stuff import get_random_str
 
-QUEUE_SIZE = 1
+QUEUE_SIZE = 180
 
 
 class Model:
@@ -51,12 +51,9 @@ class Model:
             self.output_queue.put(i)
 
     def predict(self, features):
-
-        # Get predictions dictionary
-
         features = dict(features)
         self.input_queue.put(features)
-        predictions = self.output_queue.get()  # The latest predictions generator
+        predictions = self.output_queue.get()
 
         return predictions
 
@@ -90,7 +87,7 @@ class Model:
             model_dir=model_path
         )
         self.model_path = model_path
-        return classifier#, model_path
+        return classifier
 
     def queued_predict_input_fn(self):
         """
