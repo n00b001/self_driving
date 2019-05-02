@@ -6,8 +6,9 @@ import tensorflow as tf
 
 from direct_keys import PressKey, ReleaseKey, W, A, S, D
 from grab_screen import grab_screen
+from model import Model
 from x1_collect_data import fps_stuff2
-from x2_train_net import get_model, preprocess_image, to_dict
+from x2_train_net import preprocess_image, to_dict
 
 # os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 simulate = True
@@ -70,12 +71,14 @@ def press_label(label):
         ReleaseKey(D)
 
 
-def main(model_path):
+def main(args):
+    model_path = "./models/WRKHZOWXNC"
     global index_to_label, model
     with open('./{}/label_to_index.pkl'.format(model_path), 'rb') as f:
         label_to_index = pickle.load(f)
     index_to_label = {v: k for (k, v) in label_to_index.items()}
-    model, _ = get_model(num_classes=len(index_to_label.keys()), model_path=model_path)
+    # model, _ = get_model(num_classes=len(index_to_label.keys()), model_path=model_path, dropout=0.0)
+    model = Model(index_to_label, model_path=model_path)
     print("Number of labels: {}".format(len(label_to_index.keys())))
 
     start_time = time.time()
@@ -89,8 +92,9 @@ def main(model_path):
 
 
 def normalised_screen_to_label():
-    predictions = model.predict(input_fn=get_screen_dict)  # , yield_single_examples=True)
-    output = list(predictions)[0]
+    predictions = model.predict(get_screen_dict())  # , yield_single_examples=True)
+    # predictions = model.predict(input_fn=get_screen_dict)  # , yield_single_examples=True)
+    output = predictions["class_ids"][0]
     label = index_to_label[int(output)]
     return label
 
@@ -102,9 +106,11 @@ def get_screen_dict():
         pre_processed = tf.expand_dims(pre_processed, axis=0)
         return to_dict(pre_processed)
     # return {"x": np.expand_dims(np.divide(grab_screen(), 255), axis=0)}
-    return {"x": np.expand_dims(np.zeros((96, 96, 3), dtype=np.float64), axis=0)}
+    return {"x": np.zeros((1, 96, 96, 3), dtype=np.float32)}
 
 
 if __name__ == '__main__':
+    tf.logging.set_verbosity(tf.logging.INFO)
+    tf.app.run(main)
     # main("./models/QXXXIPRWVT")
-    main("./models/JOAFTSROFU")
+    # main("./models/JOAFTSROFU")

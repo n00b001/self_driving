@@ -3,52 +3,28 @@ import pathlib
 import pickle
 import random
 
+import numpy as np
 import tensorflow as tf
+from tensorflow.python.data.experimental import AUTOTUNE
 
-from consts import DATA_DIR, IMAGE_SIZE, BATCH_SIZE, EPOCHS, MODEL_DIR, IMAGE_DEPTH, SHUFFLE_BUFFER, MAX_TRAINING_STEPS
-from file_stuff import get_random_str
+from consts import DATA_DIR, BATCH_SIZE, EPOCHS, SHUFFLE_BUFFER, MAX_TRAINING_STEPS
+from grab_screen import grab_screen
+from model import Model
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 random.seed = 1337
 
 
-def get_model(num_classes, model_path=None):
-    if model_path is None:
-        model_path = "./{}/{}".format(MODEL_DIR, get_random_str())
-    if not os.path.exists(MODEL_DIR):
-        os.mkdir(MODEL_DIR)
-
-    if not os.path.exists(model_path):
-        os.mkdir(model_path)
-        architecture = [4]
-        with open('./{}/architecture.pkl'.format(model_path), 'wb') as f:
-            pickle.dump(architecture, f, pickle.HIGHEST_PROTOCOL)
-    else:
-        with open('./{}/architecture.pkl'.format(model_path), 'rb') as f:
-            architecture = pickle.load(f)
-
-    print("Model path: {}".format(model_path))
-    feature_columns = [tf.feature_column.numeric_column("x", shape=[IMAGE_SIZE, IMAGE_SIZE, IMAGE_DEPTH])]
-    classifier = tf.estimator.DNNClassifier(
-        feature_columns=feature_columns,
-        hidden_units=architecture,
-        optimizer=tf.train.AdamOptimizer(1e-4),
-        n_classes=num_classes,
-        activation_fn=tf.nn.leaky_relu,
-        dropout=0.5,
-        model_dir=model_path
-    )
-    return classifier, model_path
-
-
 def load_and_preprocess_image(path, training):
     image = tf.image.decode_jpeg(tf.read_file(path), channels=3)
-    return preprocess_image(image, training)
+    if training:
+        return preprocess_image(image, training)
+    return image
 
 
 def preprocess_image(image, training=True):
-    image = tf.image.resize_images(image, [IMAGE_SIZE, IMAGE_SIZE])
-    image = tf.math.divide(image, 255)  # normalize to [0,1] range
+    # image = tf.image.resize_images(image, [IMAGE_SIZE, IMAGE_SIZE])
+    # image = tf.math.divide(image, 255)  # normalize to [0,1] range
 
     if training:
         if random.random() < 0.1:
@@ -102,17 +78,17 @@ def get_dataset(is_training, model_path):
         ds = ds.apply(tf.data.experimental.map_and_batch(
             map_func=load_and_preprocess_from_path_label_train,
             batch_size=BATCH_SIZE,
-            num_parallel_batches=8,
+            num_parallel_batches=os.cpu_count(),
         ))
-        ds = ds.repeat()
+        # ds = ds.repeat()
     else:
         ds = ds.apply(tf.data.experimental.map_and_batch(
             map_func=load_and_preprocess_from_path_label_test,
             batch_size=BATCH_SIZE,
-            num_parallel_batches=8,
+            num_parallel_batches=os.cpu_count(),
         ))
 
-    ds = ds.prefetch(buffer_size=BATCH_SIZE)
+    ds = ds.prefetch(buffer_size=AUTOTUNE)
     ds = ds.make_one_shot_iterator()
     ds = ds.get_next()
     return ds
@@ -145,32 +121,81 @@ def get_paths_and_count():
     return all_image_paths, number_of_labels
 
 
-def train(model, model_path):
+def train(model: Model):
     for i in range(EPOCHS):
         print("Starting epoch: {}".format(i + 1))
-        model.train(
-            input_fn=lambda: get_dataset(is_training=True, model_path=model_path),
-            steps=MAX_TRAINING_STEPS
+        # model.train(
+        #     input_fn=lambda: get_dataset(is_training=True, model_path=model_path),
+        #     steps=MAX_TRAINING_STEPS
+        # )
+        # print("Evaluating...")
+        # stats = model.evaluate(
+        #     input_fn=lambda: get_dataset(is_training=False, model_path=model_path)
+        # )
+        train_spec = tf.estimator.TrainSpec(
+            input_fn=lambda: get_dataset(is_training=True, model_path=model.model_path),
+            max_steps=MAX_TRAINING_STEPS,
         )
-        print("Evaluating...")
-        stats = model.evaluate(
-            input_fn=lambda: get_dataset(is_training=False, model_path=model_path)
+
+        eval_spec = tf.estimator.EvalSpec(
+            input_fn=lambda: get_dataset(is_training=False, model_path=model.model_path),
+            steps=None
         )
+        stats = tf.estimator.train_and_evaluate(model.model, train_spec, eval_spec)
         print("Stats: {}".format(stats))
 
+        # feature_spec = tf.feature_column.make_parse_example_spec(feature_columns)
 
-def main():
+        # x = {"x": tf.placeholder(shape=[None, IMAGE_SIZE, IMAGE_SIZE, IMAGE_DEPTH], dtype=tf.float32, name="x")}
+        # # serving_input_receiver_fn = tf.estimator.export.build_parsing_serving_input_receiver_fn(x)
+        # serving_input_receiver_fn = tf.estimator.export.build_raw_serving_input_receiver_fn(features=x)
+        # receiver_tensor = {
+        #     "receiver": x
+        # }
+        # features = {
+        #     'feature': tf.image.resize_images(receiver_tensor['x'], [IMAGE_SIZE, IMAGE_SIZE])
+        # }
+        # print("Saving as SavedModel...")
+        # model.export_savedmodel(
+        #     model_path,
+        #     lambda: tf.estimator.export.ServingInputReceiver(features, receiver_tensor),
+        #     # strip_default_attrs=True,
+        #     as_text=True
+        # )
+        # tf.get_variable_scope().reuse_variables()
+        # predictions = model.predict(input_fn=get_screen_dict)  # , yield_single_examples=True)
+        # output = list(predictions)[0]
+        # label = index_to_label[int(output)]
+        # return label
+
+#
+# def get_screen_dict():
+#     if False:
+#         image = tf.convert_to_tensor(grab_screen())
+#         pre_processed = preprocess_image(image, training=False)
+#         pre_processed = tf.expand_dims(pre_processed, axis=0)
+#         return to_dict(pre_processed)
+#     # return {"x": np.expand_dims(np.divide(grab_screen(), 255), axis=0)}
+#     return {"x": np.expand_dims(np.zeros((96, 96, 3), dtype=np.float32), axis=0)}, None
+
+
+def main(_):
     all_images, number_of_labels = get_paths_and_count()
     train_ds, test_ds = split_paths(all_images)
+
     print("Test size: {}".format(len(test_ds)))
     print("Train size: {}".format(len(train_ds)))
     num_images = len(all_images)
     print("Number of images: {}".format(num_images))
     print("Labels: {}".format(number_of_labels))
-    model, model_path = get_model(len(number_of_labels.keys()))
-    train(model, model_path)
+
+    model = Model(number_of_labels)
+    # model, model_path = get_model(len(number_of_labels.keys()))
+    train(model)
     print("")
 
 
 if __name__ == '__main__':
-    main()
+    # main()
+    tf.logging.set_verbosity(tf.logging.INFO)
+    tf.app.run(main)
