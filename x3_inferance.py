@@ -1,15 +1,15 @@
-import os
 import pickle
 import time
 
 import numpy as np
+import tensorflow as tf
 
 from direct_keys import PressKey, ReleaseKey, W, A, S, D
 from grab_screen import grab_screen
 from x1_collect_data import fps_stuff2
-from x2_train_net import get_model
+from x2_train_net import get_model, preprocess_image, to_dict
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 simulate = True
 index_to_label = None
 model = None
@@ -23,8 +23,8 @@ def release_all():
 
 
 def press_label(label):
+    print(label)
     if simulate:
-        print(label)
         return
     if label == "NO":
         release_all()
@@ -75,7 +75,8 @@ def main(model_path):
     with open('./{}/label_to_index.pkl'.format(model_path), 'rb') as f:
         label_to_index = pickle.load(f)
     index_to_label = {v: k for (k, v) in label_to_index.items()}
-    model, model_path = get_model(num_classes=len(index_to_label), model_path=model_path)
+    model, _ = get_model(num_classes=len(index_to_label.keys()), model_path=model_path)
+    print("Number of labels: {}".format(len(label_to_index.keys())))
 
     start_time = time.time()
     x = 1  # displays the frame rate every 1 second
@@ -88,16 +89,22 @@ def main(model_path):
 
 
 def normalised_screen_to_label():
-    output = list(model.predict(input_fn=get_screen_dict))[0]
+    predictions = model.predict(input_fn=get_screen_dict)  # , yield_single_examples=True)
+    output = list(predictions)[0]
     label = index_to_label[int(output)]
     return label
 
 
 def get_screen_dict():
-    return {"x": np.expand_dims(np.divide(grab_screen(), 255), axis=0)}
+    if False:
+        image = tf.convert_to_tensor(grab_screen())
+        pre_processed = preprocess_image(image, training=False)
+        pre_processed = tf.expand_dims(pre_processed, axis=0)
+        return to_dict(pre_processed)
+    # return {"x": np.expand_dims(np.divide(grab_screen(), 255), axis=0)}
+    return {"x": np.expand_dims(np.zeros((96, 96, 3), dtype=np.float64), axis=0)}
 
 
 if __name__ == '__main__':
-    # main("./models/XUNKKNYMIA")
-    main("./models/TPSZVPRWSU")
-    # main("./models/XGNASUFHKW")
+    # main("./models/QXXXIPRWVT")
+    main("./models/JOAFTSROFU")

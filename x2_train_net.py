@@ -5,7 +5,7 @@ import random
 
 import tensorflow as tf
 
-from consts import DATA_DIR, IMAGE_SIZE, BATCH_SIZE, EPOCHS, MODEL_DIR, IMAGE_DEPTH, SHUFFLE_BUFFER
+from consts import DATA_DIR, IMAGE_SIZE, BATCH_SIZE, EPOCHS, MODEL_DIR, IMAGE_DEPTH, SHUFFLE_BUFFER, MAX_TRAINING_STEPS
 from file_stuff import get_random_str
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
@@ -20,7 +20,7 @@ def get_model(num_classes, model_path=None):
 
     if not os.path.exists(model_path):
         os.mkdir(model_path)
-        architecture = [256, 32]
+        architecture = [4]
         with open('./{}/architecture.pkl'.format(model_path), 'wb') as f:
             pickle.dump(architecture, f, pickle.HIGHEST_PROTOCOL)
     else:
@@ -32,7 +32,7 @@ def get_model(num_classes, model_path=None):
     classifier = tf.estimator.DNNClassifier(
         feature_columns=feature_columns,
         hidden_units=architecture,
-        optimizer=tf.train.AdamOptimizer(1e-3),
+        optimizer=tf.train.AdamOptimizer(1e-4),
         n_classes=num_classes,
         activation_fn=tf.nn.leaky_relu,
         dropout=0.5,
@@ -41,49 +41,45 @@ def get_model(num_classes, model_path=None):
     return classifier, model_path
 
 
-def load_and_preprocess_image(path):
-    image = tf.read_file(path)
-    return preprocess_image(image)
+def load_and_preprocess_image(path, training):
+    image = tf.image.decode_jpeg(tf.read_file(path), channels=3)
+    return preprocess_image(image, training)
 
 
-def preprocess_image(image):
-    image = tf.image.decode_jpeg(image, channels=3)
+def preprocess_image(image, training=True):
     image = tf.image.resize_images(image, [IMAGE_SIZE, IMAGE_SIZE])
     image = tf.math.divide(image, 255)  # normalize to [0,1] range
 
-    if random.random() < 0.1:
-        image = tf.image.random_flip_left_right(image)
-    if random.random() < 0.03:
-        image = tf.image.random_brightness(image, 100)
-    if random.random() < 0.03:
-        image = tf.image.random_contrast(image, 0, 100)
-    if random.random() < 0.005:
-        image = tf.image.random_hue(image, 0.5)
-    if random.random() < 0.1:
-        image = tf.image.random_jpeg_quality(image, 0, 100)
-    if random.random() < 0.01:
-        image = tf.image.random_saturation(image, 0, 100)
-    # if bool(random.getrandbits(1)):
-    #     image = tf.image.random_flip_up_down(image)
-    # if bool(random.getrandbits(1)):
-    #     image = tf.image.random_brightness(image)
-    # if bool(random.getrandbits(1)):
-    #     image = tf.image.random_contrast(image)
-    # if bool(random.getrandbits(1)):
-    #     image = tf.image.random_crop(image)
-    # if bool(random.getrandbits(1)):
-    #     image = tf.image.random_hue(image)
-    # if bool(random.getrandbits(1)):
-    #     image = tf.image.random_jpeg_quality(image)
-    # if bool(random.getrandbits(1)):
-    #     image = tf.image.random_saturation(image)
+    if training:
+        if random.random() < 0.1:
+            image = tf.image.random_flip_left_right(image)
+        if random.random() < 0.03:
+            image = tf.image.random_brightness(image, 100)
+        if random.random() < 0.03:
+            image = tf.image.random_contrast(image, 0, 100)
+        if random.random() < 0.005:
+            image = tf.image.random_hue(image, 0.5)
+        if random.random() < 0.1:
+            image = tf.image.random_jpeg_quality(image, 0, 100)
+        if random.random() < 0.01:
+            image = tf.image.random_saturation(image, 0, 100)
     return image
 
 
 # The tuples are unpacked into the positional arguments of the mapped function
-def load_and_preprocess_from_path_label(path, label):
+def load_and_preprocess_from_path_label_train(path, label):
     # return load_and_preprocess_image(path), label
-    return dict({"x": load_and_preprocess_image(path)}), label
+    return to_dict(load_and_preprocess_image(path, True)), label
+
+
+def to_dict(x):
+    return {"x": x}
+
+
+# The tuples are unpacked into the positional arguments of the mapped function
+def load_and_preprocess_from_path_label_test(path, label):
+    # return load_and_preprocess_image(path), label
+    return to_dict(load_and_preprocess_image(path, False)), label
 
 
 def get_dataset(is_training, model_path):
@@ -103,12 +99,18 @@ def get_dataset(is_training, model_path):
 
     if is_training:
         ds = ds.shuffle(SHUFFLE_BUFFER)
-
-    ds = ds.apply(tf.data.experimental.map_and_batch(
-        map_func=load_and_preprocess_from_path_label,
-        batch_size=BATCH_SIZE,
-        num_parallel_batches=8,
-    ))
+        ds = ds.apply(tf.data.experimental.map_and_batch(
+            map_func=load_and_preprocess_from_path_label_train,
+            batch_size=BATCH_SIZE,
+            num_parallel_batches=8,
+        ))
+        ds = ds.repeat()
+    else:
+        ds = ds.apply(tf.data.experimental.map_and_batch(
+            map_func=load_and_preprocess_from_path_label_test,
+            batch_size=BATCH_SIZE,
+            num_parallel_batches=8,
+        ))
 
     ds = ds.prefetch(buffer_size=BATCH_SIZE)
     ds = ds.make_one_shot_iterator()
@@ -148,7 +150,7 @@ def train(model, model_path):
         print("Starting epoch: {}".format(i + 1))
         model.train(
             input_fn=lambda: get_dataset(is_training=True, model_path=model_path),
-            # steps=MAX_TRAINING_STEPS
+            steps=MAX_TRAINING_STEPS
         )
         print("Evaluating...")
         stats = model.evaluate(
