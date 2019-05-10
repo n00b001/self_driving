@@ -1,12 +1,12 @@
 import os
 import time
 
-import cv2
-
 from consts import SAVE_LIMIT
 from file_stuff import save_to_files
 from grab_keys import grab_keys
-from grab_screen import grab_screen, display_screen
+from grab_screen import grab_screen
+
+# import cv2
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 recording = False
@@ -47,15 +47,12 @@ def main():
     feature_data = []
     target_data = []
 
-    cv2.namedWindow('image', cv2.WINDOW_NORMAL)
     while True:
-        resized_screen = grab_screen()
+        screen = grab_screen()
         keys = grab_keys()
         handle_keys(keys)
-        if not recording:
-            display_screen(resized_screen)
-        else:
-            feature_data.append(resized_screen)
+        if recording:
+            feature_data.append(screen)
             target_data.append(keys)
             if len(feature_data) > SAVE_LIMIT:
                 save_to_files(feature_data, target_data)

@@ -4,11 +4,26 @@ from queue import Queue
 from threading import Thread
 
 import tensorflow as tf
+from tensorflow_estimator.python.estimator.run_config import RunConfig
 
 from consts import MODEL_DIR, DEFAULT_ARCHITECTURE, IMAGE_SIZE, IMAGE_DEPTH
 from file_stuff import get_random_str
 
-QUEUE_SIZE = 40
+QUEUE_SIZE = 1
+
+
+def get_estimator(architecture, dropout, feature_columns, model_path, num_classes, r):
+    classifier = tf.estimator.DNNClassifier(
+        feature_columns=feature_columns,
+        hidden_units=architecture,
+        optimizer=tf.train.AdamOptimizer(1e-3),
+        n_classes=num_classes,
+        activation_fn=tf.nn.leaky_relu,
+        dropout=dropout,
+        model_dir=model_path,
+        config=r,
+    )
+    return classifier
 
 
 class Model:
@@ -79,15 +94,18 @@ class Model:
             "x", shape=[IMAGE_SIZE, IMAGE_SIZE, IMAGE_DEPTH],
             normalizer_fn=lambda x: tf.math.divide(x, 255)
         )]
-        classifier = tf.estimator.DNNClassifier(
-            feature_columns=feature_columns,
-            hidden_units=architecture,
-            optimizer=tf.train.AdamOptimizer(1e-4),
-            n_classes=num_classes,
-            activation_fn=tf.nn.leaky_relu,
-            dropout=dropout,
-            model_dir=model_path
+
+        r = RunConfig(
+            # log_step_count_steps=50,
+            log_step_count_steps=500,
+            save_summary_steps=1_000,
+            keep_checkpoint_max=2,
         )
+
+        # classifier = mobilenetv2.get_estimator(
+        #     model_dir=model_path, num_classes=len(self.index_to_label.keys())
+        # )
+        classifier = get_estimator(architecture, dropout, feature_columns, model_path, num_classes, r)
         self.model_path = model_path
         return classifier
 

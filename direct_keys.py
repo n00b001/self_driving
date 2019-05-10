@@ -75,7 +75,7 @@ def ReleaseKey(hexKeyCode):
 
 
 if __name__ == '__main__':
-    PressKey(0x11)
+    PressKey(A)
     time.sleep(1)
-    ReleaseKey(0x11)
+    ReleaseKey(A)
     time.sleep(1)

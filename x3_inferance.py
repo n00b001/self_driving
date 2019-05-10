@@ -9,10 +9,23 @@ from grab_screen import grab_screen
 from model import Model
 from x1_collect_data import fps_stuff2
 
-simulate = True
+simulate = False
 index_to_label = None
 model: Model = None
 last_print_time = time.time()
+
+
+def on_click(x, y, button, pressed):
+    global simulate
+    if pressed:
+        print('Mouse clicked with {2}'.format(x, y, button))
+        if button.name == "left":
+            print("Turning on simulation...")
+            simulate = True
+        elif button.name == "right":
+            print("Turning off simulation...")
+            simulate = False
+        print("Simulate: {}".format(simulate))
 
 
 def release_all():
@@ -31,50 +44,51 @@ def press_label(label):
         return
     if label == "NO":
         release_all()
-    elif label == "WA":
+    # release_all()
+    if label == "WA":
         PressKey(W)
         PressKey(A)
         ReleaseKey(S)
         ReleaseKey(D)
     elif label == "WD":
         PressKey(W)
+        PressKey(D)
         ReleaseKey(A)
         ReleaseKey(S)
-        PressKey(D)
     elif label == "AS":
-        ReleaseKey(W)
         PressKey(A)
         PressKey(S)
+        ReleaseKey(W)
         ReleaseKey(D)
     elif label == "SD":
-        ReleaseKey(W)
-        ReleaseKey(A)
         PressKey(S)
         PressKey(D)
+        ReleaseKey(W)
+        ReleaseKey(A)
+    elif label == "A":
+        PressKey(A)
+        ReleaseKey(W)
+        ReleaseKey(S)
+        ReleaseKey(D)
+    elif label == "D":
+        PressKey(D)
+        ReleaseKey(W)
+        ReleaseKey(A)
+        ReleaseKey(S)
+    elif label == "S":
+        PressKey(S)
+        ReleaseKey(W)
+        ReleaseKey(A)
+        ReleaseKey(D)
     elif label == "W":
         PressKey(W)
         ReleaseKey(A)
         ReleaseKey(S)
         ReleaseKey(D)
-    elif label == "A":
-        ReleaseKey(W)
-        PressKey(A)
-        ReleaseKey(S)
-        ReleaseKey(D)
-    elif label == "D":
-        ReleaseKey(W)
-        ReleaseKey(A)
-        ReleaseKey(S)
-        PressKey(D)
-    elif label == "S":
-        ReleaseKey(W)
-        ReleaseKey(A)
-        PressKey(S)
-        ReleaseKey(D)
 
 
 def main(_):
-    model_path = "./models/VHAQJMFYIV"
+    model_path = "./models/MHMHYFRXLM"
     global index_to_label, model
     with open('./{}/label_to_index.pkl'.format(model_path), 'rb') as f:
         label_to_index = pickle.load(f)
