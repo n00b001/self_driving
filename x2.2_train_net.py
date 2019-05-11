@@ -4,7 +4,7 @@ from collections import Counter
 import tensorflow as tf
 from sklearn.preprocessing import LabelBinarizer
 
-from consts import IMAGE_SIZE, EPOCHS, VAL_STEPS, IMAGE_DEPTH, BATCH_SIZE
+from consts import IMAGE_SIZE, EPOCHS, VAL_STEPS, IMAGE_DEPTH, BATCH_SIZE, MODEL_DIR
 from dataset_keras import get_raw_ds
 from file_stuff import get_paths_and_count, get_labels, split_paths
 
@@ -42,13 +42,43 @@ def get_model(num_classes):
 
 def train(train_ds, test_ds, model, steps_per_epoch):
     print("Training...")
-    model.fit(train_ds.repeat(),
-              epochs=EPOCHS,
-              steps_per_epoch=steps_per_epoch,
-              validation_data=test_ds.repeat(),
-              validation_steps=VAL_STEPS,
-              # class_weight=class_weights
-              )
+    history = model.fit(train_ds.repeat(),
+                        epochs=EPOCHS,
+                        steps_per_epoch=steps_per_epoch,
+                        validation_data=test_ds.repeat(),
+                        validation_steps=VAL_STEPS,
+                        verbose=2,
+                        # class_weight=class_weights
+                        )
+
+    model.save_weights(os.path.join(MODEL_DIR, f'weights_epoch_{EPOCHS}.h5'))
+    return history
+
+
+def show_graph(history):
+    import matplotlib.pyplot as plt
+    acc = history.history['accuracy']
+    val_acc = history.history['val_accuracy']
+
+    loss = history.history['loss']
+    val_loss = history.history['val_loss']
+
+    plt.figure(figsize=(8, 8))
+    plt.subplot(2, 1, 1)
+    plt.plot(acc, label='Training Accuracy')
+    plt.plot(val_acc, label='Validation Accuracy')
+    plt.legend(loc='lower right')
+    plt.ylabel('Accuracy')
+    plt.title('Training and Validation Accuracy')
+
+    plt.subplot(2, 1, 2)
+    plt.plot(loss, label='Training Loss')
+    plt.plot(val_loss, label='Validation Loss')
+    plt.legend(loc='upper right')
+    plt.ylabel('Cross Entropy')
+    plt.title('Training and Validation Loss')
+    plt.xlabel('epoch')
+    plt.show()
 
 
 def main():
@@ -63,7 +93,8 @@ def main():
 
     xtr, xte = split_paths(all_images)
     steps_per_epoch = round(len(xtr)) // BATCH_SIZE
-    train(train_ds, test_ds, model, steps_per_epoch)
+    history = train(train_ds, test_ds, model, steps_per_epoch)
+    show_graph(history)
 
 
 def get_class_weights(y, smooth_factor=0):
@@ -73,7 +104,7 @@ def get_class_weights(y, smooth_factor=0):
         We can't use the raw string label because:
             keras wants a float label
             :(
-            
+
     Returns the weights for each class based on the frequencies of the samples
     :param smooth_factor: factor that smooths extremely uneven weights
     :param y: list of true labels (the labels must be hashable)
