@@ -96,7 +96,9 @@ def main(_):
         class_examples={k: 1 for k in label_to_index.keys()},
         label_to_index=label_to_index,
         model_path=model_path,
-        dropout=0.0
+        all_image_paths=None,  # Not needed for inference
+        dropout=0.0,
+        predict=True
     )
     print("Number of labels: {}".format(len(label_to_index.keys())))
 

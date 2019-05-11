@@ -7,31 +7,46 @@ import tensorflow as tf
 from tensorflow_estimator.python.estimator.run_config import RunConfig
 
 from consts import MODEL_DIR, DEFAULT_ARCHITECTURE, IMAGE_SIZE, IMAGE_DEPTH
-from file_stuff import get_random_str
+from file_stuff import get_random_str, get_labels, get_label_weights
 
 QUEUE_SIZE = 1
 
 
 class Model:
-    def __init__(self, class_examples: dict, label_to_index: dict, model_path=None, verbose=False, dropout=0.5):
+    def __init__(
+            self,
+            class_examples: dict,
+            label_to_index: dict,
+            all_image_paths,
+            model_path=None,
+            verbose=False,
+            dropout=0.5,
+            predict=False,
+    ):
+        if not predict and all_image_paths is None:
+            raise Exception("Must give all image paths to model for training")
         self.verbose = verbose
         self.class_examples = class_examples
         self.label_to_index = label_to_index
-        index_to_label = {v: k for (k, v) in self.label_to_index.items()}
-        self.index_to_label = index_to_label
+        self.all_image_paths = all_image_paths
         self.model_path = model_path
         self.model = self.get_model(
             model_path=model_path, dropout=dropout, label_to_index=label_to_index
         )
-        self.input_queue = Queue(maxsize=QUEUE_SIZE)
-        self.output_queue = Queue(maxsize=QUEUE_SIZE)
 
-        # We set the generator thread as daemon
-        # (see https://docs.python.org/3/library/threading.html#threading.Thread.daemon)
-        # This means that when all other threads are dead,
-        # this thread will not prevent the Python program from exiting
-        self.prediction_thread = Thread(target=self.predict_from_queue, daemon=True)
-        self.prediction_thread.start()
+        self.all_image_labels = get_labels(all_image_paths)
+        self.label_weight_list = get_label_weights(self.all_image_labels, self.class_examples)
+
+        if predict:
+            self.input_queue = Queue(maxsize=QUEUE_SIZE)
+            self.output_queue = Queue(maxsize=QUEUE_SIZE)
+
+            # We set the generator thread as daemon
+            # (see https://docs.python.org/3/library/threading.html#threading.Thread.daemon)
+            # This means that when all other threads are dead,
+            # this thread will not prevent the Python program from exiting
+            self.prediction_thread = Thread(target=self.predict_from_queue, daemon=True)
+            self.prediction_thread.start()
 
     def generate_from_queue(self):
         """ Generator which yields items from the input queue.

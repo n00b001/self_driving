@@ -1,8 +1,9 @@
+import win32gui
+import win32ui
+
 import cv2
 import numpy as np
 import win32con
-import win32gui
-import win32ui
 
 from consts import GAME_WIDTH, GAME_HEIGHT
 
