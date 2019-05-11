@@ -12,27 +12,16 @@ from file_stuff import get_random_str
 QUEUE_SIZE = 1
 
 
-def get_estimator(architecture, dropout, feature_columns, model_path, num_classes, r):
-    classifier = tf.estimator.DNNClassifier(
-        feature_columns=feature_columns,
-        hidden_units=architecture,
-        optimizer=tf.train.AdamOptimizer(1e-3),
-        n_classes=num_classes,
-        activation_fn=tf.nn.leaky_relu,
-        dropout=dropout,
-        model_dir=model_path,
-        config=r,
-    )
-    return classifier
-
-
 class Model:
-    def __init__(self, index_to_label, model_path=None, verbose=False, dropout=0.5):
+    def __init__(self, class_examples: dict, label_to_index: dict, model_path=None, verbose=False, dropout=0.5):
         self.verbose = verbose
+        self.class_examples = class_examples
+        self.label_to_index = label_to_index
+        index_to_label = {v: k for (k, v) in self.label_to_index.items()}
         self.index_to_label = index_to_label
         self.model_path = model_path
         self.model = self.get_model(
-            model_path=model_path, dropout=dropout, num_classes=len(self.index_to_label.keys())
+            model_path=model_path, dropout=dropout, label_to_index=label_to_index
         )
         self.input_queue = Queue(maxsize=QUEUE_SIZE)
         self.output_queue = Queue(maxsize=QUEUE_SIZE)
@@ -71,10 +60,11 @@ class Model:
         predictions = self.output_queue.get()
 
         output = predictions["class_ids"][0]
-        label = self.index_to_label[int(output)]
-        return label
+        # todo: this will break if we use string labels
+        # label = self.index_to_label[int(output)]
+        return str(output)
 
-    def get_model(self, num_classes, model_path=None, dropout=0.5):
+    def get_model(self, label_to_index, model_path=None, dropout=0.5):
         if model_path is None:
             model_path = "./{}/{}".format(MODEL_DIR, get_random_str())
         if not os.path.exists(MODEL_DIR):
@@ -105,8 +95,25 @@ class Model:
         # classifier = mobilenetv2.get_estimator(
         #     model_dir=model_path, num_classes=len(self.index_to_label.keys())
         # )
-        classifier = get_estimator(architecture, dropout, feature_columns, model_path, num_classes, r)
+        classifier = self.get_estimator(architecture, dropout, feature_columns, model_path, label_to_index, r)
         self.model_path = model_path
+        return classifier
+
+    def get_estimator(self, architecture, dropout, feature_columns, model_path, label_to_index, r):
+        weight = tf.feature_column.numeric_column('w')
+        label_list = list(label_to_index.keys())
+        classifier = tf.estimator.DNNClassifier(
+            feature_columns=feature_columns,
+            hidden_units=architecture,
+            optimizer=tf.train.AdamOptimizer(1e-3),
+            n_classes=len(label_list),
+            activation_fn=tf.nn.leaky_relu,
+            dropout=dropout,
+            model_dir=model_path,
+            config=r,
+            weight_column=weight,
+            label_vocabulary=label_list
+        )
         return classifier
 
     def queued_predict_input_fn(self):

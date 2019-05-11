@@ -1,6 +1,5 @@
 import os
 import pathlib
-import pickle
 import random
 import traceback
 
@@ -16,19 +15,19 @@ random.seed = 1337
 
 def load_and_preprocess_image(path):
     image = tf.image.decode_jpeg(tf.read_file(path), channels=3)
-    resized_image = tf.image.resize_images(image, (IMAGE_SIZE, IMAGE_SIZE))
-    return resized_image
+    return tf.image.resize_images(image, (IMAGE_SIZE, IMAGE_SIZE))
 
 
 def img_augmentation(image, label):
-    image = image["x"]
+    x = image["x"]
+    w = image["w"]
     random_num = random.random()
     if random_num < 0.1:
-        image = tf.image.random_flip_left_right(image)
+        x = tf.image.random_flip_left_right(x)
     if random_num < 0.03:
-        image = tf.image.random_brightness(image, 100)
+        x = tf.image.random_brightness(x, 100)
     if random_num < 0.03:
-        image = tf.image.random_contrast(image, 0, 100)
+        x = tf.image.random_contrast(x, 0, 100)
     # todo: below needs changing before it'll work for batches
     # if random_num < 0.005:
     #     image = tf.image.random_hue(image, 0.5)
@@ -36,19 +35,25 @@ def img_augmentation(image, label):
     #     image = tf.image.random_jpeg_quality(image, 0, 100)
     # if random_num < 0.01:
     #     image = tf.image.random_saturation(image, 0, 100)
-    return to_dict(image), label
+    return to_dict(x, w), label
 
 
-def load_and_preprocess_from_path_label(path, label):
-    return to_dict(load_and_preprocess_image(path)), label
+def load_and_preprocess_from_path_label(path, label, weight):
+    x = load_and_preprocess_image(path)
+    # w = weight_table.lookup(label)
+    return to_dict(x, weight), label
 
 
-def to_dict(x):
-    return {"x": x}
+def to_dict(x, w):
+    return {
+        "x": x,
+        "w": w
+    }
 
 
-def get_dataset(is_training, model_path):
-    all_image_paths, number_of_labels = get_paths_and_count()
+def get_dataset(is_training, class_examples):
+    # global number_of_labels
+    all_image_paths, _ = get_paths_and_count()
 
     train_ds, test_ds = split_paths(all_image_paths)
     if is_training:
@@ -56,12 +61,23 @@ def get_dataset(is_training, model_path):
     else:
         all_image_paths = test_ds
 
-    label_to_index = dict((name, index) for index, name in enumerate(number_of_labels.keys()))
-    with open('./{}/label_to_index.pkl'.format(model_path), 'wb') as f:
-        pickle.dump(label_to_index, f, pickle.HIGHEST_PROTOCOL)
+    # label_to_index = dict((name, index) for index, name in enumerate(number_of_labels.keys()))
+    # with open('./{}/label_to_index.pkl'.format(model_path), 'wb') as f:
+    #     pickle.dump(label_to_index, f, pickle.HIGHEST_PROTOCOL)
 
-    all_image_labels = [label_to_index[pathlib.Path(path).parent.name] for path in all_image_paths]
-    ds = tf.data.Dataset.from_tensor_slices((all_image_paths, all_image_labels))
+    all_image_labels = [pathlib.Path(path).parent.name for path in all_image_paths]
+    # all_image_labels = [label_to_index[pathlib.Path(path).parent.name] for path in all_image_paths]
+
+    max_val = max(class_examples.values())
+    label_weight = {k: 2.0 - (v / max_val) for k, v in class_examples.items()}
+    # keys = tf.convert_to_tensor(list(label_weight.keys()))
+    # values = tf.convert_to_tensor(list(label_weight.values()))
+    # weight_table = tf.contrib.lookup.HashTable(
+    #     tf.contrib.lookup.KeyValueTensorInitializer(keys, values), -1
+    # )
+    label_weight_list = [label_weight[l] for l in all_image_labels]
+
+    ds = tf.data.Dataset.from_tensor_slices((all_image_paths, all_image_labels, label_weight_list))
 
     ds = ds.apply(tf.data.experimental.map_and_batch(
         map_func=load_and_preprocess_from_path_label,
@@ -69,7 +85,8 @@ def get_dataset(is_training, model_path):
         num_parallel_batches=os.cpu_count(),
     ))
     ds = ds.apply(tf.data.experimental.ignore_errors())
-    ds = ds.cache(filename=os.path.join(CACHE_LOCATION, "cache.tf"))
+    # todo: this cache is a real pain in the ASS
+    # ds = ds.cache(filename=os.path.join(CACHE_LOCATION, "cache.tf"))
     if is_training:
         ds = ds.map(
             map_func=img_augmentation,
@@ -77,7 +94,12 @@ def get_dataset(is_training, model_path):
         )
         ds = ds.shuffle(SHUFFLE_BUFFER)
     ds = ds.prefetch(buffer_size=AUTOTUNE)
+    # todo: ValueError: Failed to create a one-shot iterator for a dataset.
+    # `Dataset.make_one_shot_iterator()` does not support datasets that capture stateful objects,
+    #   such as a `Variable` or `LookupTable`. In these cases, use `Dataset.make_initializable_iterator()`.
     ds = ds.make_one_shot_iterator()
+    # ds = ds.make_initializable_iterator()
+    # tf.get_default_session().run(ds.initializer)
     ds = ds.get_next()
     return ds
 
@@ -98,6 +120,7 @@ def is_good_data(item):
 
 
 def get_paths_and_count():
+    print("Getting paths and count...")
     data_root = pathlib.Path(DATA_DIR)
     label_names = [item for item in data_root.glob('*/') if item.is_dir()]
     all_file_names = {
@@ -122,12 +145,12 @@ def train(model: Model):
     for i in range(EPOCHS):
         print("Starting epoch: {}".format(i + 1))
         train_spec = tf.estimator.TrainSpec(
-            input_fn=lambda: get_dataset(is_training=True, model_path=model.model_path),
+            input_fn=lambda: get_dataset(is_training=True, class_examples=model.class_examples),
             max_steps=MAX_TRAINING_STEPS,
         )
 
         eval_spec = tf.estimator.EvalSpec(
-            input_fn=lambda: get_dataset(is_training=False, model_path=model.model_path),
+            input_fn=lambda: get_dataset(is_training=False, class_examples=model.class_examples),
             steps=None,
         )
         stats = tf.estimator.train_and_evaluate(model.model, train_spec, eval_spec)
@@ -148,7 +171,8 @@ def main(_):
     label_to_index = dict((name, index) for index, name in enumerate(class_examples.keys()))
     print("label_to_index: {}".format(label_to_index))
 
-    model = Model(label_to_index)
+    model = Model(class_examples=class_examples,
+                  label_to_index=label_to_index)
     train(model)
     print("")
 

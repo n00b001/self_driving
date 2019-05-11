@@ -92,8 +92,12 @@ def main(_):
     global index_to_label, model
     with open('./{}/label_to_index.pkl'.format(model_path), 'rb') as f:
         label_to_index = pickle.load(f)
-    index_to_label = {v: k for (k, v) in label_to_index.items()}
-    model = Model(index_to_label, model_path=model_path, dropout=0.0)
+    model = Model(
+        class_examples={k: 1 for k in label_to_index.keys()},
+        label_to_index=label_to_index,
+        model_path=model_path,
+        dropout=0.0
+    )
     print("Number of labels: {}".format(len(label_to_index.keys())))
 
     start_time = time.time()
