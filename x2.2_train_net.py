@@ -1,16 +1,19 @@
 import os
+import pickle
 from collections import Counter
 
 import cv2
+import matplotlib.pyplot as plt
+import numpy as np
 import tensorflow as tf
+import time
 from sklearn.preprocessing import LabelBinarizer
 
-from consts import IMAGE_SIZE, EPOCHS, VAL_STEPS, IMAGE_DEPTH, BATCH_SIZE, MODEL_DIR
+from consts import IMAGE_SIZE, EPOCHS, VAL_STEPS, IMAGE_DEPTH, BATCH_SIZE, MODEL_DIR, FINE_TUNE_EPOCHS
 from dataset_keras import get_raw_ds
-from file_stuff import get_paths_and_count, get_labels, split_paths, get_random_str
+from file_stuff import get_paths_and_count, get_labels, split_paths, get_random_str, get_label_weights
 from grab_screen import grab_screen
-import numpy as np
-import pickle
+from x1_collect_data import fps_stuff2
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
@@ -41,7 +44,7 @@ def get_base_model():
     return base_model
 
 
-def train(train_ds, test_ds, model, steps_per_epoch, learning_rate, model_path):
+def train(train_ds, test_ds, model, steps_per_epoch, learning_rate, model_path, tensorboard_callback, weights):
     # Compile the model
     model.compile(optimizer=tf.keras.optimizers.Adam(lr=learning_rate),
                   loss='binary_crossentropy',
@@ -55,18 +58,16 @@ def train(train_ds, test_ds, model, steps_per_epoch, learning_rate, model_path):
                         steps_per_epoch=steps_per_epoch,
                         validation_data=test_ds.repeat(),
                         validation_steps=VAL_STEPS,
+                        callbacks=[tensorboard_callback]
                         # verbose=1,
                         # class_weight=class_weights
                         )
 
-    model.save_weights(model_path)
+    tf.contrib.saved_model.save_keras_model(model, model_path)
     return history
 
 
-def show_graph(history):
-    import matplotlib.pyplot as plt
-    print(history)
-    print(history.history)
+def show_graph(history, name="Course"):
     acc = history.history['acc']
     val_acc = history.history['val_acc']
 
@@ -75,23 +76,22 @@ def show_graph(history):
 
     plt.figure(figsize=(8, 8))
     plt.subplot(2, 1, 1)
-    plt.plot(acc, label='Training Accuracy')
-    plt.plot(val_acc, label='Validation Accuracy')
+    plt.plot(acc, label=f'{name} Training Accuracy')
+    plt.plot(val_acc, label=f'{name} Validation Accuracy')
     plt.legend(loc='lower right')
-    plt.ylabel('Accuracy')
-    plt.title('Training and Validation Accuracy')
+    plt.ylabel(f'{name} Accuracy')
+    plt.title(f'{name} Training and Validation Accuracy')
 
     plt.subplot(2, 1, 2)
-    plt.plot(loss, label='Training Loss')
-    plt.plot(val_loss, label='Validation Loss')
+    plt.plot(loss, label=f'{name} Training Loss')
+    plt.plot(val_loss, label=f'{name} Validation Loss')
     plt.legend(loc='upper right')
     plt.ylabel('Cross Entropy')
-    plt.title('Training and Validation Loss')
+    plt.title(f'{name} Training and Validation Loss')
     plt.xlabel('epoch')
-    plt.show()
 
 
-def fine_tune(model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path):
+def fine_tune(model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path, tensorboard_callback, weights ):
     # Fine-tune model
     # Note: Set initial_epoch to begin training after epoch 30 since we
     # previously trained for 30 epochs.
@@ -101,9 +101,10 @@ def fine_tune(model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_mode
                         epochs=total_epochs,
                         initial_epoch=EPOCHS,
                         validation_data=test_ds.repeat(),
+                        callbacks=[tensorboard_callback],
                         validation_steps=VAL_STEPS)
 
-    model.save_weights(fine_model_path)
+    tf.contrib.saved_model.save_keras_model(model, fine_model_path)
     return history
 
 
@@ -128,38 +129,79 @@ def load_model(model_path):
 
 
 def predict(fine_model_path, num_classes, encoder):
-    base_model = get_base_model()
-    model = get_model(base_model=base_model, num_classes=num_classes)
-    model = setup_for_fine_tune(base_model=base_model, model=model)
-    model.load_weights(fine_model_path)
-    model.summary()
+    latest = get_latest_dir(fine_model_path)
+    tf_lite_path = os.path.join(fine_model_path, "converted_model.tflite")
+    if os.path.exists(tf_lite_path):
+        model = tf.lite.Interpreter(model_path=tf_lite_path)
+    else:
+        converter = tf.lite.TFLiteConverter.from_saved_model(latest)
+        model = converter.convert()
+        open(tf_lite_path, "wb").write(model)
+        model = tf.lite.Interpreter(model_path=tf_lite_path)
+    model.allocate_tensors()
+
+    start_time = time.time()
+    x = 1
+    counter = 0
+    # Get input and output tensors.
+    input_details = model.get_input_details()
+    output_details = model.get_output_details()
     while True:
-        scr = grab_screen()
-        resized = cv2.resize(scr, (IMAGE_SIZE, IMAGE_SIZE), interpolation=cv2.INTER_LINEAR)
-        scr_resiz = np.expand_dims(resized, axis=0)
-        output = model.predict(scr_resiz)
-        print(f"Output: {output}")
+        scr_resiz = np.expand_dims(
+            np.divide(
+                cv2.resize(
+                    grab_screen(), (IMAGE_SIZE, IMAGE_SIZE), interpolation=cv2.INTER_LINEAR),
+                255.0),
+            axis=0).astype(np.float32)
+        output = predict_tflite(scr_resiz, input_details, model, output_details)
+        # print(f"Output: {output}")
         label = encoder.inverse_transform(output)
-        print(f"label: {label}")
+        # print(f"label: {label}")
+        counter, start_time = fps_stuff2(counter, start_time, x)
+
+
+def predict_tflite(input_data, input_details, model, output_details):
+    model.set_tensor(input_details[0]['index'], input_data)
+    model.invoke()
+    output_data = model.get_tensor(output_details[0]['index'])
+    return output_data
+
+
+def get_latest_dir(direct):
+    all_subdirs = [os.path.join(direct, d) for d in os.listdir(direct) if os.path.isdir(os.path.join(direct, d))]
+    latest_subdir = max(all_subdirs, key=os.path.getmtime)
+    return latest_subdir
 
 
 def main():
     # Increase training epochs for fine-tuning
-    fine_tune_epochs = 10
-    total_epochs = EPOCHS + fine_tune_epochs
+    total_epochs = EPOCHS + FINE_TUNE_EPOCHS
 
-    random_str = get_random_str()
-    model_path = os.path.join(MODEL_DIR, random_str, f'weights_epoch_{EPOCHS}.h5')
-    fine_model_path = os.path.join(MODEL_DIR, random_str, f'fine_weights_epoch_{total_epochs}.h5')
+    # random_str = get_random_str()
+    random_str = "GSAECNGPNA"
+    model_base_dir = os.path.join(MODEL_DIR, random_str)
+    os.makedirs(model_base_dir, exist_ok=True)
+    model_path = os.path.join(MODEL_DIR, random_str, f'weights_epoch_{EPOCHS}')
+    fine_model_path = os.path.join(MODEL_DIR, random_str, f'fine_weights_epoch_{total_epochs}')
     learning_rate = 0.0001
 
-    encoder_file = os.path.join(MODEL_DIR, "encoder_file.p")
-    num_classes_file = os.path.join(MODEL_DIR, "num_classes.p")
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(
+        log_dir=model_base_dir,
+        write_graph=True,
+        histogram_freq=0,
+        write_images=True,
+        batch_size=BATCH_SIZE,
+        update_freq='batch'
+    )
+
+    encoder_file = os.path.join(MODEL_DIR, random_str, "encoder_file.p")
+    num_classes_file = os.path.join(MODEL_DIR, random_str, "num_classes.p")
 
     if not os.path.exists(fine_model_path):
         all_images, class_examples = get_paths_and_count()
         num_classes = len(class_examples.keys())
         labels = get_labels(all_images)
+        weights = get_label_weights(labels, class_examples)
         encoder = LabelBinarizer()
         transfomed_label = encoder.fit_transform(labels)
 
@@ -172,26 +214,34 @@ def main():
         steps_per_epoch = round(len(xtr)) // BATCH_SIZE
 
         if not os.path.exists(model_path):
-            print("Tuning...")
+            print(f"Tuning {model_path}...")
             base_model = get_base_model()
             model = get_model(base_model=base_model, num_classes=num_classes)
-            history1 = train(train_ds, test_ds, model, steps_per_epoch, learning_rate, model_path)
+            history1 = train(
+                train_ds, test_ds, model, steps_per_epoch, learning_rate, model_path, tensorboard_callback, weights
+            )
             model = setup_for_fine_tune(base_model, learning_rate=learning_rate, model=model)
-            history2 = fine_tune(model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path)
-            # show_graph(history1)
-            show_graph(history2)
+            history2 = fine_tune(
+                model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path, tensorboard_callback, weights
+            )
+            show_graph(history1)
+            show_graph(history2, name="Fine")
+            plt.show()
         else:
-            print("Fine tuning...")
+            print(f"Fine tuning {fine_model_path}...")
             base_model = get_base_model()
             model = get_model(base_model=base_model, num_classes=num_classes)
             model.load_weights(model_path)
             model = setup_for_fine_tune(base_model, learning_rate=learning_rate, model=model)
-            history2 = fine_tune(model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path)
-            show_graph(history2)
+            history2 = fine_tune(
+                model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path, tensorboard_callback, weights
+            )
+            show_graph(history2, name="Fine")
+            plt.show()
 
     encoder = pickle.load(open(encoder_file, "rb"))
     num_classes = pickle.load(open(num_classes_file, "rb"))
-    print("Predicting...")
+    print(f"Predicting {fine_model_path}...")
     predict(fine_model_path, num_classes=num_classes, encoder=encoder)
 
 

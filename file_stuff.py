@@ -90,7 +90,7 @@ def get_labels(all_image_paths):
 
 def get_label_weights(all_image_labels, class_examples):
     """
-    this will generate weights from 2 ~ 1, where 1 is the most common label and 2 is the least common label
+    this will generate weights from 1.5 ~ 0.5, where 1 is the most common label and 2 is the least common label
     """
     label_weight = get_weight_lookup(class_examples)
     label_weight_list = [label_weight[l] for l in all_image_labels]
@@ -99,5 +99,5 @@ def get_label_weights(all_image_labels, class_examples):
 
 def get_weight_lookup(class_examples):
     max_val = max(class_examples.values())
-    label_weight = {k: 2.0 - (v / max_val) for k, v in class_examples.items()}
+    label_weight = {k: 1.5 - (v / max_val) for k, v in class_examples.items()}
     return label_weight
