@@ -7,7 +7,7 @@ from sklearn.preprocessing import LabelBinarizer
 
 from consts import IMAGE_SIZE, EPOCHS, VAL_STEPS, IMAGE_DEPTH, BATCH_SIZE, MODEL_DIR
 from dataset_keras import get_raw_ds
-from file_stuff import get_paths_and_count, get_labels, split_paths
+from file_stuff import get_paths_and_count, get_labels, split_paths, get_random_str
 from grab_screen import grab_screen
 import numpy as np
 import pickle
@@ -148,8 +148,9 @@ def main():
     fine_tune_epochs = 10
     total_epochs = EPOCHS + fine_tune_epochs
 
-    model_path = os.path.join(MODEL_DIR, f'weights_epoch_{EPOCHS}.h5')
-    fine_model_path = os.path.join(MODEL_DIR, f'fine_weights_epoch_{total_epochs}.h5')
+    random_str = get_random_str()
+    model_path = os.path.join(MODEL_DIR, random_str, f'weights_epoch_{EPOCHS}.h5')
+    fine_model_path = os.path.join(MODEL_DIR, random_str, f'fine_weights_epoch_{total_epochs}.h5')
     learning_rate = 0.0001
 
     encoder_file = os.path.join(MODEL_DIR, "encoder_file.p")
