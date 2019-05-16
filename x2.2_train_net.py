@@ -145,7 +145,7 @@ def predict(fine_model_path, num_classes, encoder):
 
 def main():
     # Increase training epochs for fine-tuning
-    fine_tune_epochs = 2
+    fine_tune_epochs = 10
     total_epochs = EPOCHS + fine_tune_epochs
 
     model_path = os.path.join(MODEL_DIR, f'weights_epoch_{EPOCHS}.h5')
@@ -174,16 +174,19 @@ def main():
             print("Tuning...")
             base_model = get_base_model()
             model = get_model(base_model=base_model, num_classes=num_classes)
-            history = train(train_ds, test_ds, model, steps_per_epoch, learning_rate, model_path)
-            show_graph(history)
+            history1 = train(train_ds, test_ds, model, steps_per_epoch, learning_rate, model_path)
+            model = setup_for_fine_tune(base_model, learning_rate=learning_rate, model=model)
+            history2 = fine_tune(model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path)
+            # show_graph(history1)
+            show_graph(history2)
         else:
             print("Fine tuning...")
             base_model = get_base_model()
             model = get_model(base_model=base_model, num_classes=num_classes)
             model.load_weights(model_path)
             model = setup_for_fine_tune(base_model, learning_rate=learning_rate, model=model)
-            history = fine_tune(model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path)
-            show_graph(history)
+            history2 = fine_tune(model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path)
+            show_graph(history2)
 
     encoder = pickle.load(open(encoder_file, "rb"))
     num_classes = pickle.load(open(num_classes_file, "rb"))
