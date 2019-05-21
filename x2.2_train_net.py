@@ -11,7 +11,7 @@ import tensorflow as tf
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils import class_weight
 
-from consts import IMAGE_SIZE, EPOCHS, VAL_STEPS, IMAGE_DEPTH, BATCH_SIZE, MODEL_DIR, FINE_TUNE_EPOCHS
+from consts import IMAGE_SIZE, EPOCHS, VAL_STEPS, IMAGE_DEPTH, BATCH_SIZE, MODEL_DIR, FINE_TUNE_EPOCHS, LEARNING_RATE
 from dataset_keras import get_raw_ds, process_image_np
 from file_stuff import get_paths_and_count, get_labels, split_paths, get_random_str, get_label_weights
 from grab_screen import grab_screen
@@ -212,7 +212,6 @@ def main():
     os.makedirs(model_base_dir, exist_ok=True)
     model_path = os.path.join(MODEL_DIR, random_str, f'weights_epoch_{EPOCHS}')
     fine_model_path = os.path.join(MODEL_DIR, random_str, f'fine_weights_epoch_{total_epochs}')
-    learning_rate = 0.0001
 
     tensorboard_callback = tf.keras.callbacks.TensorBoard(
         log_dir=model_base_dir,
@@ -250,10 +249,10 @@ def main():
             base_model = get_base_model()
             model = get_model(base_model=base_model, num_classes=num_classes)
             history1 = train(
-                train_ds, test_ds, model, steps_per_epoch, learning_rate,
+                train_ds, test_ds, model, steps_per_epoch, LEARNING_RATE,
                 model_path, tensorboard_callback, weights, class_weights
             )
-            model = setup_for_fine_tune(base_model, learning_rate=learning_rate, model=model)
+            model = setup_for_fine_tune(base_model, learning_rate=LEARNING_RATE, model=model)
             history2 = fine_tune(
                 model, train_ds, test_ds, steps_per_epoch, total_epochs,
                 fine_model_path, tensorboard_callback, weights, class_weights
@@ -266,7 +265,7 @@ def main():
             base_model = get_base_model()
             model = get_model(base_model=base_model, num_classes=num_classes)
             model.load_weights(model_path)
-            model = setup_for_fine_tune(base_model, learning_rate=learning_rate, model=model)
+            model = setup_for_fine_tune(base_model, learning_rate=LEARNING_RATE, model=model)
             history2 = fine_tune(
                 model, train_ds, test_ds, steps_per_epoch, total_epochs,
                 fine_model_path, tensorboard_callback, weights, class_weights
