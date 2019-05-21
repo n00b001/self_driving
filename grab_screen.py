@@ -24,6 +24,7 @@ def find_game_window():
         set_game_demensions(hwid)
     else:
         # raise Exception("Cannot find game window!")
+        print("Cannot find game window!")
         pass
 
 

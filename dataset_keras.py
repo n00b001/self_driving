@@ -1,10 +1,13 @@
 import os
 import random
 
+import cv2
 import tensorflow as tf
 from tensorflow.python.data.experimental import AUTOTUNE
+import numpy as np
+from tensorflow.python.ops.image_ops_impl import ResizeMethod
 
-from consts import SHUFFLE_BUFFER, IMAGE_SIZE, BATCH_SIZE
+from consts import IMAGE_SIZE, BATCH_SIZE, SHUFFLE_BUFFER
 
 
 def get_raw_ds(all_image_labels, all_image_paths, is_training):
@@ -29,19 +32,41 @@ def get_raw_ds(all_image_labels, all_image_paths, is_training):
     return ds.prefetch(buffer_size=AUTOTUNE)
 
 
-def load_and_preprocess_image(path):
-    image = tf.image.decode_jpeg(tf.read_file(path), channels=3)
-    return tf.image.resize_images(image, (IMAGE_SIZE, IMAGE_SIZE))
+def process_image(image):
+    resized = tf.image.resize_images(image, (IMAGE_SIZE, IMAGE_SIZE), method=ResizeMethod.AREA)
+    norm = tf.image.per_image_standardization(resized)
+    return norm
+
+
+def process_image_np(image):
+    resized = cv2.resize(image, (IMAGE_SIZE, IMAGE_SIZE), interpolation=cv2.INTER_AREA)
+
+    image_mean = resized.mean()
+    variance = np.subtract(np.mean(np.square(resized), axis=(-1, -2, -3), keepdims=True),
+                           np.square(image_mean))
+    variance = variance * (variance > 0)
+    stddev = np.sqrt(variance)
+
+    min_stddev = np.reciprocal(np.sqrt(resized.size))
+    pixel_value_scale = max(stddev, min_stddev)
+
+    new_image = np.subtract(resized, image_mean)
+    new_image = np.divide(new_image, pixel_value_scale)
+
+    return new_image
 
 
 def img_augmentation(x, label):
     random_num = random.random()
-    if random_num < 0.1:
+    if random_num < 0.5:
         x = tf.image.random_flip_left_right(x)
-    if random_num < 0.03:
+    if random_num < 0.5:
         x = tf.image.random_brightness(x, 100)
-    if random_num < 0.03:
+    if random_num < 0.5:
         x = tf.image.random_contrast(x, 0, 100)
+    if random_num < 0.5:
+        std = 0.2
+        x += tf.random_normal(shape=tf.shape(x), mean=0.0, stddev=std, dtype=tf.float32)
     # todo: below needs changing before it'll work for batches
     # if random_num < 0.005:
     #     image = tf.image.random_hue(image, 0.5)
@@ -53,5 +78,5 @@ def img_augmentation(x, label):
 
 
 def load_and_preprocess_from_path_label(path, label):
-    x = load_and_preprocess_image(path)
-    return x, label
+    image = tf.image.decode_jpeg(tf.read_file(path), channels=3)
+    return process_image(image), label

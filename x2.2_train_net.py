@@ -1,5 +1,6 @@
 import os
 import pickle
+import traceback
 from collections import Counter
 
 import cv2
@@ -8,9 +9,10 @@ import numpy as np
 import tensorflow as tf
 import time
 from sklearn.preprocessing import LabelBinarizer
+from sklearn.utils import class_weight
 
 from consts import IMAGE_SIZE, EPOCHS, VAL_STEPS, IMAGE_DEPTH, BATCH_SIZE, MODEL_DIR, FINE_TUNE_EPOCHS
-from dataset_keras import get_raw_ds
+from dataset_keras import get_raw_ds, process_image, process_image_np
 from file_stuff import get_paths_and_count, get_labels, split_paths, get_random_str, get_label_weights
 from grab_screen import grab_screen
 from x1_collect_data import fps_stuff2
@@ -44,7 +46,10 @@ def get_base_model():
     return base_model
 
 
-def train(train_ds, test_ds, model, steps_per_epoch, learning_rate, model_path, tensorboard_callback, weights):
+def train(
+        train_ds, test_ds, model, steps_per_epoch, learning_rate, model_path,
+        tensorboard_callback, weights, class_weight
+):
     # Compile the model
     model.compile(optimizer=tf.keras.optimizers.Adam(lr=learning_rate),
                   loss='binary_crossentropy',
@@ -58,8 +63,10 @@ def train(train_ds, test_ds, model, steps_per_epoch, learning_rate, model_path, 
                         steps_per_epoch=steps_per_epoch,
                         validation_data=test_ds.repeat(),
                         validation_steps=VAL_STEPS,
-                        callbacks=[tensorboard_callback]
-                        # verbose=1,
+                        callbacks=[tensorboard_callback],
+                        class_weight=class_weight,
+                        # sample_weight=weights,
+                        verbose=2,
                         # class_weight=class_weights
                         )
 
@@ -91,7 +98,10 @@ def show_graph(history, name="Course"):
     plt.xlabel('epoch')
 
 
-def fine_tune(model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path, tensorboard_callback, weights ):
+def fine_tune(
+        model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path,
+        tensorboard_callback, weights, class_weight
+):
     # Fine-tune model
     # Note: Set initial_epoch to begin training after epoch 30 since we
     # previously trained for 30 epochs.
@@ -102,6 +112,9 @@ def fine_tune(model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_mode
                         initial_epoch=EPOCHS,
                         validation_data=test_ds.repeat(),
                         callbacks=[tensorboard_callback],
+                        # sample_weight=weights,
+                        class_weight=class_weight,
+                        verbose=2,
                         validation_steps=VAL_STEPS)
 
     tf.contrib.saved_model.save_keras_model(model, fine_model_path)
@@ -146,17 +159,28 @@ def predict(fine_model_path, num_classes, encoder):
     # Get input and output tensors.
     input_details = model.get_input_details()
     output_details = model.get_output_details()
+    print(f"Input: {input_details}")
+    print(f"Output: {output_details}")
     while True:
-        scr_resiz = np.expand_dims(
-            np.divide(
-                cv2.resize(
-                    grab_screen(), (IMAGE_SIZE, IMAGE_SIZE), interpolation=cv2.INTER_LINEAR),
-                255.0),
-            axis=0).astype(np.float32)
-        output = predict_tflite(scr_resiz, input_details, model, output_details)
-        # print(f"Output: {output}")
-        label = encoder.inverse_transform(output)
-        # print(f"label: {label}")
+        scr = grab_screen()
+        scr_typed = scr.astype(np.float32)
+
+        # img_tensor = tf.convert_to_tensor(scr_typed)
+        # img_tensor = process_image(img_tensor)
+        # with tf.Session() as sess:
+        #     img2 = sess.run(img_tensor)
+        img = process_image_np(scr_typed)
+
+        # scr_resiz = np.expand_dims(
+        #     np.divide(
+        #         cv2.resize(
+        #             grab_screen(), (IMAGE_SIZE, IMAGE_SIZE), interpolation=cv2.INTER_LINEAR),
+        #         255.0),
+        #     axis=0).astype(np.float32)
+        output = predict_tflite([img], input_details, model, output_details)
+        print(f"Output: {output[0]}")
+        label = encoder.inverse_transform(output)[0]
+        print(f"label: {label}")
         counter, start_time = fps_stuff2(counter, start_time, x)
 
 
@@ -177,8 +201,8 @@ def main():
     # Increase training epochs for fine-tuning
     total_epochs = EPOCHS + FINE_TUNE_EPOCHS
 
-    # random_str = get_random_str()
-    random_str = "GSAECNGPNA"
+    random_str = get_random_str()
+    # random_str = "IDBULYIUOJ"
     model_base_dir = os.path.join(MODEL_DIR, random_str)
     os.makedirs(model_base_dir, exist_ok=True)
     model_path = os.path.join(MODEL_DIR, random_str, f'weights_epoch_{EPOCHS}')
@@ -202,6 +226,8 @@ def main():
         num_classes = len(class_examples.keys())
         labels = get_labels(all_images)
         weights = get_label_weights(labels, class_examples)
+        class_weights = class_weight.compute_class_weight('balanced', np.unique(labels), labels)
+
         encoder = LabelBinarizer()
         transfomed_label = encoder.fit_transform(labels)
 
@@ -212,17 +238,20 @@ def main():
 
         xtr, xte = split_paths(all_images)
         steps_per_epoch = round(len(xtr)) // BATCH_SIZE
+        print(f"Steps per epoch: {steps_per_epoch}")
 
         if not os.path.exists(model_path):
             print(f"Tuning {model_path}...")
             base_model = get_base_model()
             model = get_model(base_model=base_model, num_classes=num_classes)
             history1 = train(
-                train_ds, test_ds, model, steps_per_epoch, learning_rate, model_path, tensorboard_callback, weights
+                train_ds, test_ds, model, steps_per_epoch, learning_rate,
+                model_path, tensorboard_callback, weights, class_weights
             )
             model = setup_for_fine_tune(base_model, learning_rate=learning_rate, model=model)
             history2 = fine_tune(
-                model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path, tensorboard_callback, weights
+                model, train_ds, test_ds, steps_per_epoch, total_epochs,
+                fine_model_path, tensorboard_callback, weights, class_weights
             )
             show_graph(history1)
             show_graph(history2, name="Fine")
@@ -234,7 +263,8 @@ def main():
             model.load_weights(model_path)
             model = setup_for_fine_tune(base_model, learning_rate=learning_rate, model=model)
             history2 = fine_tune(
-                model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path, tensorboard_callback, weights
+                model, train_ds, test_ds, steps_per_epoch, total_epochs,
+                fine_model_path, tensorboard_callback, weights, class_weights
             )
             show_graph(history2, name="Fine")
             plt.show()
@@ -287,4 +317,7 @@ def get_datasets(x, y):
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as e:
+        traceback.print_exc()
