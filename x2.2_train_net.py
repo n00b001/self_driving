@@ -1,18 +1,18 @@
 import os
 import pickle
+import time
 import traceback
 from collections import Counter
 
-import cv2
+import keras_metrics
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-import time
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils import class_weight
 
 from consts import IMAGE_SIZE, EPOCHS, VAL_STEPS, IMAGE_DEPTH, BATCH_SIZE, MODEL_DIR, FINE_TUNE_EPOCHS
-from dataset_keras import get_raw_ds, process_image, process_image_np
+from dataset_keras import get_raw_ds, process_image_np
 from file_stuff import get_paths_and_count, get_labels, split_paths, get_random_str, get_label_weights
 from grab_screen import grab_screen
 from x1_collect_data import fps_stuff2
@@ -23,7 +23,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 def get_model(base_model, num_classes):
     # Trainable classification head
     maxpool_layer = tf.keras.layers.GlobalMaxPooling2D()
-    prediction_layer = tf.keras.layers.Dense(num_classes, activation='sigmoid')
+    prediction_layer = tf.keras.layers.Dense(num_classes, activation='softmax')
     # Layer classification head with feature detector
     model = tf.keras.Sequential([
         base_model,
@@ -48,12 +48,12 @@ def get_base_model():
 
 def train(
         train_ds, test_ds, model, steps_per_epoch, learning_rate, model_path,
-        tensorboard_callback, weights, class_weight
+        tensorboard_callback, weights, class_weights
 ):
     # Compile the model
     model.compile(optimizer=tf.keras.optimizers.Adam(lr=learning_rate),
-                  loss='binary_crossentropy',
-                  metrics=['accuracy']
+                  loss='categorical_crossentropy',
+                  metrics=get_metrics()
                   )
 
     print("Training...")
@@ -64,7 +64,7 @@ def train(
                         validation_data=test_ds.repeat(),
                         validation_steps=VAL_STEPS,
                         callbacks=[tensorboard_callback],
-                        class_weight=class_weight,
+                        class_weight=class_weights,
                         # sample_weight=weights,
                         verbose=2,
                         # class_weight=class_weights
@@ -100,7 +100,7 @@ def show_graph(history, name="Course"):
 
 def fine_tune(
         model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path,
-        tensorboard_callback, weights, class_weight
+        tensorboard_callback, weights, class_weights
 ):
     # Fine-tune model
     # Note: Set initial_epoch to begin training after epoch 30 since we
@@ -113,7 +113,7 @@ def fine_tune(
                         validation_data=test_ds.repeat(),
                         callbacks=[tensorboard_callback],
                         # sample_weight=weights,
-                        class_weight=class_weight,
+                        class_weight=class_weights,
                         verbose=2,
                         validation_steps=VAL_STEPS)
 
@@ -130,10 +130,15 @@ def setup_for_fine_tune(base_model, model, learning_rate=0.001):
     # Use a lower learning rate
     lr_finetune = learning_rate / 10.0
     # Recompile the model
-    model.compile(loss='binary_crossentropy',
+    model.compile(loss='categorical_crossentropy',
                   optimizer=tf.keras.optimizers.Adam(lr=lr_finetune),
-                  metrics=['accuracy'])
+                  metrics=get_metrics()
+                  )
     return model
+
+
+def get_metrics():
+    return ['accuracy']
 
 
 def load_model(model_path):

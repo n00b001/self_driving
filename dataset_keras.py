@@ -57,23 +57,23 @@ def process_image_np(image):
 
 
 def img_augmentation(x, label):
-    random_num = random.random()
-    if random_num < 0.5:
+    if random.random() < 0.5:
         x = tf.image.random_flip_left_right(x)
-    if random_num < 0.5:
-        x = tf.image.random_brightness(x, 100)
-    if random_num < 0.5:
-        x = tf.image.random_contrast(x, 0, 100)
-    if random_num < 0.5:
-        std = 0.2
-        x += tf.random_normal(shape=tf.shape(x), mean=0.0, stddev=std, dtype=tf.float32)
-    # todo: below needs changing before it'll work for batches
-    # if random_num < 0.005:
-    #     image = tf.image.random_hue(image, 0.5)
-    # if random_num < 0.1:
-    #     image = tf.image.random_jpeg_quality(image, 0, 100)
-    # if random_num < 0.01:
-    #     image = tf.image.random_saturation(image, 0, 100)
+    if random.random() < 0.01:
+        x = tf.image.random_brightness(x, 50)
+    if random.random() < 0.01:
+        x = tf.image.random_contrast(x, 50, 150)
+    if random.random() < 0.9:
+        x += tf.random_normal(shape=tf.shape(x), mean=0.0, stddev=1.0, dtype=tf.float32)
+    if random.random() < 0.1:
+        hue = lambda h_func: tf.image.random_hue(h_func, 0.1)
+        x = tf.map_fn(hue, x)
+    if random.random() < 0.1:
+        jpeg = lambda j_func: tf.image.random_jpeg_quality(j_func, 50, 100)
+        x = tf.map_fn(jpeg, x)
+    if random.random() < 0.1:
+        sat = lambda s_func: tf.image.random_saturation(s_func, 50, 150)
+        x = tf.map_fn(sat, x)
     return x, label
 
 
