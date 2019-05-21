@@ -57,21 +57,21 @@ def process_image_np(image):
 
 
 def img_augmentation(x, label):
-    if random.random() < 0.5:
+    if random.random() < 0.2:
         x = tf.image.random_flip_left_right(x)
     if random.random() < 0.01:
         x = tf.image.random_brightness(x, 50)
     if random.random() < 0.01:
         x = tf.image.random_contrast(x, 50, 150)
-    if random.random() < 0.9:
+    if random.random() < 0.5:
         x += tf.random_normal(shape=tf.shape(x), mean=0.0, stddev=1.0, dtype=tf.float32)
-    if random.random() < 0.1:
+    if random.random() < 0.01:
         hue = lambda h_func: tf.image.random_hue(h_func, 0.1)
         x = tf.map_fn(hue, x)
     if random.random() < 0.1:
         jpeg = lambda j_func: tf.image.random_jpeg_quality(j_func, 50, 100)
         x = tf.map_fn(jpeg, x)
-    if random.random() < 0.1:
+    if random.random() < 0.01:
         sat = lambda s_func: tf.image.random_saturation(s_func, 50, 150)
         x = tf.map_fn(sat, x)
     return x, label
