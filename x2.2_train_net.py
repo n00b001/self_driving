@@ -10,7 +10,7 @@ import tensorflow as tf
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils import class_weight
 
-from consts import IMAGE_SIZE, EPOCHS, VAL_STEPS, IMAGE_DEPTH, BATCH_SIZE, MODEL_DIR, FINE_TUNE_EPOCHS, LEARNING_RATE
+from consts import IMAGE_SIZE, EPOCHS, IMAGE_DEPTH, BATCH_SIZE, MODEL_DIR, FINE_TUNE_EPOCHS, LEARNING_RATE
 from dataset_keras import get_raw_ds, process_image_np
 from file_stuff import get_paths_and_count, get_labels, split_paths, get_label_weights, get_random_str
 from grab_screen import grab_screen
@@ -55,7 +55,7 @@ def get_base_model():
 
 def train(
         train_ds, test_ds, model, steps_per_epoch, learning_rate, model_path,
-        tensorboard_callback, weights, class_weights, val_steps
+        tensorboard_callback, weights, class_weights, val_steps, checkpoint
 ):
     # Compile the model
     model.compile(optimizer=tf.train.AdamOptimizer(learning_rate=learning_rate),
@@ -70,7 +70,7 @@ def train(
                         steps_per_epoch=steps_per_epoch,
                         validation_data=test_ds.repeat(),
                         validation_steps=val_steps,
-                        callbacks=[tensorboard_callback],
+                        callbacks=[tensorboard_callback, checkpoint],
                         # class_weight=class_weights,
                         # sample_weight=weights,
                         # verbose=2,
@@ -110,7 +110,7 @@ def show_graph(history, name="Course"):
 
 def fine_tune(
         model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path,
-        tensorboard_callback, weights, class_weights, val_steps
+        tensorboard_callback, weights, class_weights, val_steps, checkpoint
 ):
     # Fine-tune model
     # Note: Set initial_epoch to begin training after epoch 30 since we
@@ -121,7 +121,7 @@ def fine_tune(
                         epochs=total_epochs,
                         initial_epoch=EPOCHS,
                         validation_data=test_ds.repeat(),
-                        callbacks=[tensorboard_callback],
+                        callbacks=[tensorboard_callback, checkpoint],
                         # sample_weight=weights,
                         # class_weight=class_weights,
                         # verbose=2,
@@ -139,7 +139,7 @@ def setup_for_fine_tune(base_model, model, learning_rate=0.001):
     base_model.trainable = True
     # Refreeze layers until the layers we want to fine-tune
     for layer in base_model.layers[:100]:
-    # for layer in base_model.layers[:25]:
+        # for layer in base_model.layers[:25]:
         layer.trainable = False
     # Use a lower learning rate
     lr_finetune = learning_rate / 10.0
@@ -237,6 +237,11 @@ def main():
 
     )
 
+    checkpoint = tf.keras.callbacks.ModelCheckpoint(
+        os.path.join(model_base_dir, "weights.{epoch:02d}-{val_loss:.2f}.hdf5"),
+        monitor='val_loss', verbose=0, save_best_only=True,
+        save_weights_only=False, mode='auto', period=1)
+
     encoder_file = os.path.join(MODEL_DIR, random_str, "encoder_file.p")
     num_classes_file = os.path.join(MODEL_DIR, random_str, "num_classes.p")
 
@@ -269,17 +274,19 @@ def main():
             history1 = train(
                 train_ds, test_ds, model, steps_per_epoch, LEARNING_RATE,
                 model_path, tensorboard_callback, weights, class_weights,
-                val_steps
+                val_steps, checkpoint
             )
             model = setup_for_fine_tune(base_model, learning_rate=LEARNING_RATE, model=model)
-            history2 = fine_tune(
-                model, train_ds, test_ds, steps_per_epoch, total_epochs,
-                fine_model_path, tensorboard_callback, weights, class_weights,
-                val_steps
-            )
-            show_graph(history1)
-            show_graph(history2, name="Fine")
-            plt.show()
+            for i in range(10):
+                fine_model_path = os.path.join(MODEL_DIR, random_str, f'fine_weights_epoch_{i}_{total_epochs}')
+                history2 = fine_tune(
+                    model, train_ds, test_ds, steps_per_epoch, total_epochs,
+                    fine_model_path, tensorboard_callback, weights, class_weights,
+                    val_steps, checkpoint
+                )
+                # show_graph(history1)
+                # show_graph(history2, name="Fine")
+                # plt.show()
         else:
             print(f"Fine tuning {fine_model_path}...")
             base_model = get_base_model()
@@ -289,7 +296,7 @@ def main():
             history2 = fine_tune(
                 model, train_ds, test_ds, steps_per_epoch, total_epochs,
                 fine_model_path, tensorboard_callback, weights, class_weights,
-                val_steps
+                val_steps, checkpoint
             )
             show_graph(history2, name="Fine")
             plt.show()

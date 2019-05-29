@@ -2,9 +2,9 @@ import os
 import random
 
 import cv2
+import numpy as np
 import tensorflow as tf
 from tensorflow.python.data.experimental import AUTOTUNE
-import numpy as np
 from tensorflow.python.ops.image_ops_impl import ResizeMethod
 
 from consts import IMAGE_SIZE, BATCH_SIZE, SHUFFLE_BUFFER
@@ -29,13 +29,20 @@ def get_raw_ds(all_image_labels, all_image_paths, is_training):
             num_parallel_calls=os.cpu_count()
         )
         ds = ds.shuffle(SHUFFLE_BUFFER)
+    ds = ds.map(
+        map_func=norm_image,
+        num_parallel_calls=os.cpu_count()
+    )
     return ds.prefetch(buffer_size=AUTOTUNE)
 
 
+def norm_image(image, label):
+    std = lambda s_fun: tf.image.per_image_standardization(s_fun)
+    return tf.map_fn(std, image), label
+
+
 def process_image(image):
-    resized = tf.image.resize_images(image, (IMAGE_SIZE, IMAGE_SIZE), method=ResizeMethod.AREA)
-    norm = tf.image.per_image_standardization(resized)
-    return norm
+    return tf.image.resize_images(image, (IMAGE_SIZE, IMAGE_SIZE), method=ResizeMethod.AREA)
 
 
 def process_image_np(image):
@@ -57,21 +64,21 @@ def process_image_np(image):
 
 
 def img_augmentation(x, label):
-    if random.random() < 0.01:
+    if random.random() < 0.5:
         x = tf.image.random_flip_left_right(x)
-    if random.random() < 0.1:
+    if random.random() < 0.5:
         x = tf.image.random_brightness(x, 10)
-    if random.random() < 0.1:
+    if random.random() < 0.5:
         x = tf.image.random_contrast(x, 80, 120)
     if random.random() < 0.5:
-        x += tf.random_normal(shape=tf.shape(x), mean=0.0, stddev=1.0, dtype=tf.float32)
-    if random.random() < 0.1:
+        x += tf.random_normal(shape=tf.shape(x), mean=0.0, stddev=2.0, dtype=tf.float32)
+    if random.random() < 0.5:
         hue = lambda h_func: tf.image.random_hue(h_func, 0.01)
         x = tf.map_fn(hue, x)
-    if random.random() < 0.1:
+    if random.random() < 0.5:
         jpeg = lambda j_func: tf.image.random_jpeg_quality(j_func, 50, 100)
         x = tf.map_fn(jpeg, x)
-    if random.random() < 0.1:
+    if random.random() < 0.5:
         sat = lambda s_func: tf.image.random_saturation(s_func, 80, 120)
         x = tf.map_fn(sat, x)
     return x, label
