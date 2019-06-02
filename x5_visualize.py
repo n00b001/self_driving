@@ -68,19 +68,24 @@ def show_all_layers(intersting_layers, activations, img):
     plt.pause(0.1)
 
 
-def heatmap_3(model, img, output_path, reduced_image):
+def heatmap_3(model):
+    # base_model = model.layers[0]
+    # intersting_layers = []
+    # reg = "block_.*relu"
+    # for l in model.layers[0].layers[100:135]:
+    #     if re.match(reg, l.name):
+    #         intersting_layers.append(l)
+
     base_model = model.layers[0]
-    # /layer_names = [f"block_{i}_expand_relu" for i in range(1, 12)]
-    # layer_names = [i.name for i in model.layers[0].layers if i.name != "input_1"]
     intersting_layers = []
-    #reg = "[^i].*"
-    reg = "block_.*relu"
-    #for l in model.layers[0].layers:
-    for l in model.layers[0].layers[100:135]:
+    # reg = "conv2d_.*"
+    reg = "activation_.*"
+    for l in model.layers[0].layers:
         if re.match(reg, l.name):
             intersting_layers.append(l)
+    if len(intersting_layers) == 0:
+        get_layer_by_name(base_model, "asdf")
 
-    # intersting_layers = [get_layer_by_name(base_model, x) for x in layer_names]
     layer_outputs = [layer.output for layer in intersting_layers]
 
     # Creates a model that will return these outputs, given the model input
@@ -88,26 +93,26 @@ def heatmap_3(model, img, output_path, reduced_image):
         inputs=base_model.input, outputs=layer_outputs
     )
 
-    activations = activation_model.predict(img)
-    # Returns a list of five Numpy arrays: one array per layer activation
+    while True:
+        scr = grab_screen()
+        img = process_image_np(scr.astype(np.float32))
+        expanded_img = np.expand_dims(img, axis=0)
 
-    show_all_layers(intersting_layers, activations, reduced_image)
+        activations = activation_model.predict(expanded_img)
+        # Returns a list of five Numpy arrays: one array per layer activation
+
+        show_all_layers(intersting_layers, activations, scr)
 
 
 def main():
     img_path = "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\data\\W\\AAAOYAZVNA_2.jpg"
     # img_path = "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\data\\W\\AAACBGIXKK.jpg"
-    model_path = "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\models\\IDBULYIUOJ\\fine_weights_epoch_4\\1558129135"
+    # model_path = "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\models\\IDBULYIUOJ\\fine_weights_epoch_4\\1558129135" # mobilenetv2
+    model_path = "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\models\\BQPEMNVUJT\\fine_weights_epoch_11\\1558707601" # inceptionRestnmet
     output_path = "."
     model = tf.contrib.saved_model.load_keras_model(model_path)
 
-    while True:
-        scr = grab_screen()
-        # scr = cv2.imread(img_path)
-        scr_typed = scr.astype(np.float32)
-        img = process_image_np(scr_typed)
-        expanded_img = np.expand_dims(img, axis=0)
-        heatmap_3(model, expanded_img, output_path, scr)
+    heatmap_3(model)
 
 
 if __name__ == '__main__':

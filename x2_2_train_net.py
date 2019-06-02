@@ -40,8 +40,15 @@ def get_model(base_model, num_classes):
 
 def get_base_model():
     print("Getting model...")
-    # Pre-trained model with MobileNetV2
-    base_model = tf.keras.applications.MobileNetV2(
+    # # Pre-trained model with MobileNetV2
+    # base_model = tf.keras.applications.MobileNetV2(
+    #     input_shape=(IMAGE_SIZE, IMAGE_SIZE, IMAGE_DEPTH),
+    #     include_top=False,
+    #     alpha=1.0,
+    #     weights='imagenet'
+
+    # Pre-trained model with MobileNet
+    base_model = tf.keras.applications.MobileNet(
         input_shape=(IMAGE_SIZE, IMAGE_SIZE, IMAGE_DEPTH),
         include_top=False,
         alpha=1.0,

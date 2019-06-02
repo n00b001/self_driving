@@ -67,8 +67,8 @@ def process_image_np(image):
 
 def img_augmentation(x, label):
     thresh = 0.5
-    if np.random.uniform(0, 1) < thresh:
-        x = tf.image.random_flip_left_right(x)
+    # todo; DO NOT RANDOM LEFT RIGHT FLIP - WE ARE TRYING TO PREDICT DRIVING LEFT OR RIGHT
+
     if np.random.uniform(0, 1) < thresh:
         x = tf.image.random_brightness(x, 10)
     if np.random.uniform(0, 1) < thresh:
@@ -76,7 +76,7 @@ def img_augmentation(x, label):
     if np.random.uniform(0, 1) < thresh:
         x += tf.random_normal(shape=tf.shape(x), mean=0.0, stddev=2.0, dtype=tf.float32)
     if np.random.uniform(0, 1) < thresh:
-        hue = lambda h_func: tf.image.random_hue(h_func, 0.01)
+        hue = lambda h_func: tf.image.random_hue(h_func, 0.0001)
         x = tf.map_fn(hue, x)
     if np.random.uniform(0, 1) < thresh:
         jpeg = lambda j_func: tf.image.random_jpeg_quality(j_func, 50, 100)
