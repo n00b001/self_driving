@@ -1,14 +1,19 @@
 import os
 import pickle
+import random
 import time
 import traceback
 from collections import Counter
+
+import scipy
+import cv2
 
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils import class_weight
+from tensorflow.python.keras.optimizer_v2.adam import Adam
 
 from consts import IMAGE_SIZE, EPOCHS, IMAGE_DEPTH, BATCH_SIZE, MODEL_DIR, FINE_TUNE_EPOCHS, LEARNING_RATE
 from dataset_keras import get_raw_ds, process_image_np
@@ -36,18 +41,18 @@ def get_model(base_model, num_classes):
 def get_base_model():
     print("Getting model...")
     # Pre-trained model with MobileNetV2
-    # base_model = tf.keras.applications.MobileNetV2(
-    #     input_shape=(IMAGE_SIZE, IMAGE_SIZE, IMAGE_DEPTH),
-    #     include_top=False,
-    #     alpha=1.0,
-    #     weights='imagenet'
-    # )
-    # Pre-trained model with MobileNetV2
-    base_model = tf.keras.applications.InceptionResNetV2(
+    base_model = tf.keras.applications.MobileNetV2(
         input_shape=(IMAGE_SIZE, IMAGE_SIZE, IMAGE_DEPTH),
         include_top=False,
+        alpha=1.0,
         weights='imagenet'
     )
+    # # Pre-trained model with MobileNetV2
+    # base_model = tf.keras.applications.InceptionResNetV2(
+    #     input_shape=(IMAGE_SIZE, IMAGE_SIZE, IMAGE_DEPTH),
+    #     include_top=False,
+    #     weights='imagenet'
+    # )
     # Freeze the pre-trained model weights
     base_model.trainable = False
     return base_model
@@ -58,10 +63,12 @@ def train(
         tensorboard_callback, weights, class_weights, val_steps, checkpoint
 ):
     # Compile the model
-    model.compile(optimizer=tf.train.AdamOptimizer(learning_rate=learning_rate),
-                  loss='categorical_crossentropy',
-                  metrics=get_metrics()
-                  )
+    model.compile(
+        optimizer=Adam(learning_rate=learning_rate),
+        # optimizer=tf.train.AdamOptimizer(learning_rate=learning_rate),
+        loss='categorical_crossentropy',
+        metrics=get_metrics()
+    )
 
     print("Training...")
     model.summary()
@@ -81,6 +88,7 @@ def train(
                         )
 
     tf.contrib.saved_model.save_keras_model(model, model_path)
+    model.save(model_path + ".full_model.h5")
     return history
 
 
@@ -131,6 +139,7 @@ def fine_tune(
                         use_multiprocessing=False)
 
     tf.contrib.saved_model.save_keras_model(model, fine_model_path)
+    model.save(fine_model_path + ".full_model.h5")
     return history
 
 
@@ -145,7 +154,8 @@ def setup_for_fine_tune(base_model, model, learning_rate=0.001):
     lr_finetune = learning_rate / 10.0
     # Recompile the model
     model.compile(loss='categorical_crossentropy',
-                  optimizer=tf.train.AdamOptimizer(learning_rate=lr_finetune),
+                  optimizer=Adam(learning_rate=lr_finetune),
+                  # optimizer=tf.train.AdamOptimizer(learning_rate=lr_finetune),
                   metrics=get_metrics()
                   )
     return model
@@ -183,19 +193,7 @@ def predict(fine_model_path, num_classes, encoder):
     while True:
         scr = grab_screen()
         scr_typed = scr.astype(np.float32)
-
-        # img_tensor = tf.convert_to_tensor(scr_typed)
-        # img_tensor = process_image(img_tensor)
-        # with tf.Session() as sess:
-        #     img2 = sess.run(img_tensor)
         img = process_image_np(scr_typed)
-
-        # scr_resiz = np.expand_dims(
-        #     np.divide(
-        #         cv2.resize(
-        #             grab_screen(), (IMAGE_SIZE, IMAGE_SIZE), interpolation=cv2.INTER_LINEAR),
-        #         255.0),
-        #     axis=0).astype(np.float32)
         output = predict_tflite([img], input_details, model, output_details)
         label = encoder.inverse_transform(output)[0]
         press_label(label)
@@ -240,7 +238,8 @@ def main():
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
         os.path.join(model_base_dir, "weights.{epoch:02d}-{val_loss:.2f}.hdf5"),
         monitor='val_loss', verbose=0, save_best_only=True,
-        save_weights_only=False, mode='auto', period=1)
+        save_weights_only=False, mode='auto', period=1
+    )
 
     encoder_file = os.path.join(MODEL_DIR, random_str, "encoder_file.p")
     num_classes_file = os.path.join(MODEL_DIR, random_str, "num_classes.p")
@@ -249,6 +248,16 @@ def main():
     if not os.path.exists(fine_model_path):
         print(f"{fine_model_path} doesn't exist...")
         all_images, class_examples = get_paths_and_count()
+        # while True:
+        #     print("\nShowing...")
+        #     img = random.choice(all_images)
+        #     data = cv2.imread(img)
+        #     cv2.imshow('ImageWindow', data)
+        #     cv2.waitKey(0)
+        #     cv2.destroyAllWindows()
+        #     print("img: " + img)
+        # raise Exception("")
+
         num_classes = len(class_examples.keys())
         labels = get_labels(all_images)
         weights = get_label_weights(labels, class_examples)

@@ -24,6 +24,8 @@ def get_log_dir():
 
 
 def save_func(resized_screen, keys):
+    random_id = get_random_str()
+
     for i in range(len(keys)):
         frame_screen = resized_screen[i]
         frame_keys = keys[i]
@@ -35,7 +37,7 @@ def save_func(resized_screen, keys):
         output_path = os.path.join(DATA_DIR, frame_keys_str)
         if not os.path.exists(output_path):
             os.mkdir(output_path)
-        random_name = get_random_str() + ".jpg"
+        random_name = random_id + "_" + str(i) + ".jpg"
         file_name = os.path.join(output_path, random_name)
         cv2.imwrite(file_name, frame_screen, [int(cv2.IMWRITE_JPEG_QUALITY), 100])
     print("Saved!")

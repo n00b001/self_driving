@@ -42,6 +42,8 @@ def norm_image(image, label):
 
 
 def process_image(image):
+    # if image.shape[0] > IMAGE_SIZE:
+    #     raise Exception("nope")
     return tf.image.resize_images(image, (IMAGE_SIZE, IMAGE_SIZE), method=ResizeMethod.AREA)
 
 
@@ -64,21 +66,22 @@ def process_image_np(image):
 
 
 def img_augmentation(x, label):
-    if random.random() < 0.5:
+    thresh = 0.5
+    if np.random.uniform(0, 1) < thresh:
         x = tf.image.random_flip_left_right(x)
-    if random.random() < 0.5:
+    if np.random.uniform(0, 1) < thresh:
         x = tf.image.random_brightness(x, 10)
-    if random.random() < 0.5:
+    if np.random.uniform(0, 1) < thresh:
         x = tf.image.random_contrast(x, 80, 120)
-    if random.random() < 0.5:
+    if np.random.uniform(0, 1) < thresh:
         x += tf.random_normal(shape=tf.shape(x), mean=0.0, stddev=2.0, dtype=tf.float32)
-    if random.random() < 0.5:
+    if np.random.uniform(0, 1) < thresh:
         hue = lambda h_func: tf.image.random_hue(h_func, 0.01)
         x = tf.map_fn(hue, x)
-    if random.random() < 0.5:
+    if np.random.uniform(0, 1) < thresh:
         jpeg = lambda j_func: tf.image.random_jpeg_quality(j_func, 50, 100)
         x = tf.map_fn(jpeg, x)
-    if random.random() < 0.5:
+    if np.random.uniform(0, 1) < thresh:
         sat = lambda s_func: tf.image.random_saturation(s_func, 80, 120)
         x = tf.map_fn(sat, x)
     return x, label
