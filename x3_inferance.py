@@ -1,16 +1,12 @@
-import pickle
 import time
 
-import numpy as np
 import tensorflow as tf
 
 from direct_keys import PressKey, ReleaseKey, W, A, S, D
-from grab_screen import grab_screen
 from model import Model
 from x1_collect_data import fps_stuff2
 
 simulate = False
-index_to_label = None
 model: Model = None
 last_print_time = time.time()
 
@@ -44,8 +40,9 @@ def press_label(label):
         return
     if label == "NO":
         release_all()
+        pass
     # release_all()
-    if label == "WA":
+    elif label == "WA":
         PressKey(W)
         PressKey(A)
         ReleaseKey(S)
@@ -85,35 +82,26 @@ def press_label(label):
         ReleaseKey(A)
         ReleaseKey(S)
         ReleaseKey(D)
+    # time.sleep(0.05)
+    # release_all()
 
 
 def main(_):
-    model_path = "./models/MHMHYFRXLM"
-    global index_to_label, model
-    with open('./{}/label_to_index.pkl'.format(model_path), 'rb') as f:
-        label_to_index = pickle.load(f)
+    model_path = "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\models\\TSZIATHCIA"
+    global model
     model = Model(
-        class_examples={k: 1 for k in label_to_index.keys()},
-        label_to_index=label_to_index,
         model_path=model_path,
-        all_image_paths=None,  # Not needed for inference
-        dropout=0.0,
-        predict=True
+        predict=True,
     )
-    print("Number of labels: {}".format(len(label_to_index.keys())))
 
     start_time = time.time()
     x = 1
     counter = 0
 
     while True:
-        label = model.predict(get_screen_dict())
+        label = model.predict()
         press_label(label)
         counter, start_time = fps_stuff2(counter, start_time, x)
-
-
-def get_screen_dict():
-    return {"x": np.expand_dims(grab_screen(), axis=0)}
 
 
 if __name__ == '__main__':

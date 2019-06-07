@@ -1,12 +1,8 @@
 import os
 import pickle
-import random
 import time
 import traceback
 from collections import Counter
-
-import scipy
-import cv2
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,7 +13,7 @@ from tensorflow.python.keras.optimizer_v2.adam import Adam
 
 from consts import IMAGE_SIZE, EPOCHS, IMAGE_DEPTH, BATCH_SIZE, MODEL_DIR, FINE_TUNE_EPOCHS, LEARNING_RATE
 from dataset_keras import get_raw_ds, process_image_np
-from file_stuff import get_paths_and_count, get_labels, split_paths, get_label_weights, get_random_str
+from file_stuff import get_paths_and_count, get_labels, split_paths, get_label_weights, get_random_str, get_latest_dir
 from grab_screen import grab_screen
 from x1_collect_data import fps_stuff2
 from x3_inferance import press_label
@@ -61,7 +57,7 @@ def get_base_model():
     #     weights='imagenet'
     # )
     # Freeze the pre-trained model weights
-    base_model.trainable = False
+    base_model.trainable = True
     return base_model
 
 
@@ -95,7 +91,7 @@ def train(
                         )
 
     tf.contrib.saved_model.save_keras_model(model, model_path)
-    model.save(model_path + ".full_model.h5")
+    # model.save(model_path + ".full_model.h5")
     return history
 
 
@@ -127,14 +123,11 @@ def fine_tune(
         model, train_ds, test_ds, steps_per_epoch, total_epochs, fine_model_path,
         tensorboard_callback, weights, class_weights, val_steps, checkpoint
 ):
-    # Fine-tune model
-    # Note: Set initial_epoch to begin training after epoch 30 since we
-    # previously trained for 30 epochs.
     model.summary()
     history = model.fit(train_ds.repeat(),
                         steps_per_epoch=steps_per_epoch,
                         epochs=total_epochs,
-                        initial_epoch=EPOCHS,
+                        # initial_epoch=EPOCHS,
                         validation_data=test_ds.repeat(),
                         callbacks=[tensorboard_callback, checkpoint],
                         # sample_weight=weights,
@@ -142,11 +135,11 @@ def fine_tune(
                         # verbose=2,
                         verbose=1,
                         validation_steps=val_steps,
-                        workers=1,
-                        use_multiprocessing=False)
+                        workers=8,
+                        use_multiprocessing=True)
 
     tf.contrib.saved_model.save_keras_model(model, fine_model_path)
-    model.save(fine_model_path + ".full_model.h5")
+    # model.save(fine_model_path + ".full_model.h5")
     return history
 
 
@@ -154,14 +147,14 @@ def setup_for_fine_tune(base_model, model, learning_rate=0.001):
     # Unfreeze all layers of MobileNetV2
     base_model.trainable = True
     # Refreeze layers until the layers we want to fine-tune
-    for layer in base_model.layers[:100]:
-        # for layer in base_model.layers[:25]:
-        layer.trainable = False
+    # for layer in base_model.layers[:25]:
+    # for layer in base_model.layers[:25]:
+    # layer.trainable = False
     # Use a lower learning rate
-    lr_finetune = learning_rate / 10.0
+    # lr_finetune = learning_rate / 10.0
     # Recompile the model
     model.compile(loss='categorical_crossentropy',
-                  optimizer=Adam(learning_rate=lr_finetune),
+                  optimizer=Adam(learning_rate=learning_rate),
                   # optimizer=tf.train.AdamOptimizer(learning_rate=lr_finetune),
                   metrics=get_metrics()
                   )
@@ -214,22 +207,16 @@ def predict_tflite(input_data, input_details, model, output_details):
     return output_data
 
 
-def get_latest_dir(direct):
-    all_subdirs = [os.path.join(direct, d) for d in os.listdir(direct) if os.path.isdir(os.path.join(direct, d))]
-    latest_subdir = max(all_subdirs, key=os.path.getmtime)
-    return latest_subdir
-
-
 def main():
     # Increase training epochs for fine-tuning
     total_epochs = EPOCHS + FINE_TUNE_EPOCHS
 
     random_str = get_random_str()
-    # random_str = "EYMVQSWJGS"
+    random_str = "TSZIATHCIA"
     model_base_dir = os.path.join(MODEL_DIR, random_str)
     os.makedirs(model_base_dir, exist_ok=True)
     model_path = os.path.join(MODEL_DIR, random_str, f'weights_epoch_{EPOCHS}')
-    fine_model_path = os.path.join(MODEL_DIR, random_str, f'fine_weights_epoch_{total_epochs}')
+    fine_model_path = os.path.join(MODEL_DIR, random_str, f'fine_weights_epoch_0_{total_epochs}')
 
     tensorboard_callback = tf.keras.callbacks.TensorBoard(
         log_dir=model_base_dir,
@@ -252,18 +239,9 @@ def main():
     num_classes_file = os.path.join(MODEL_DIR, random_str, "num_classes.p")
 
     # if True:
-    if not os.path.exists(fine_model_path):
+    if False and not os.path.exists(fine_model_path):
         print(f"{fine_model_path} doesn't exist...")
         all_images, class_examples = get_paths_and_count()
-        # while True:
-        #     print("\nShowing...")
-        #     img = random.choice(all_images)
-        #     data = cv2.imread(img)
-        #     cv2.imshow('ImageWindow', data)
-        #     cv2.waitKey(0)
-        #     cv2.destroyAllWindows()
-        #     print("img: " + img)
-        # raise Exception("")
 
         num_classes = len(class_examples.keys())
         labels = get_labels(all_images)
@@ -287,11 +265,6 @@ def main():
             print(f"Tuning {model_path}...")
             base_model = get_base_model()
             model = get_model(base_model=base_model, num_classes=num_classes)
-            history1 = train(
-                train_ds, test_ds, model, steps_per_epoch, LEARNING_RATE,
-                model_path, tensorboard_callback, weights, class_weights,
-                val_steps, checkpoint
-            )
             model = setup_for_fine_tune(base_model, learning_rate=LEARNING_RATE, model=model)
             for i in range(10):
                 fine_model_path = os.path.join(MODEL_DIR, random_str, f'fine_weights_epoch_{i}_{total_epochs}')
@@ -300,22 +273,6 @@ def main():
                     fine_model_path, tensorboard_callback, weights, class_weights,
                     val_steps, checkpoint
                 )
-                # show_graph(history1)
-                # show_graph(history2, name="Fine")
-                # plt.show()
-        else:
-            print(f"Fine tuning {fine_model_path}...")
-            base_model = get_base_model()
-            model = get_model(base_model=base_model, num_classes=num_classes)
-            model.load_weights(model_path)
-            model = setup_for_fine_tune(base_model, learning_rate=LEARNING_RATE, model=model)
-            history2 = fine_tune(
-                model, train_ds, test_ds, steps_per_epoch, total_epochs,
-                fine_model_path, tensorboard_callback, weights, class_weights,
-                val_steps, checkpoint
-            )
-            show_graph(history2, name="Fine")
-            plt.show()
 
     encoder = pickle.load(open(encoder_file, "rb"))
     num_classes = pickle.load(open(num_classes_file, "rb"))

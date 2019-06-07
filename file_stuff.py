@@ -64,6 +64,12 @@ def is_good_data(item):
     return False
 
 
+def get_latest_dir(direct):
+    all_subdirs = [os.path.join(direct, d) for d in os.listdir(direct) if os.path.isdir(os.path.join(direct, d))]
+    latest_subdir = max(all_subdirs, key=os.path.getmtime)
+    return latest_subdir
+
+
 def get_paths_and_count():
     print("Getting paths and count...")
     data_root = pathlib.Path(DATA_DIR)

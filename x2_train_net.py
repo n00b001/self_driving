@@ -16,7 +16,7 @@ random.seed = 1337
 def train(model: Model):
     path_train, path_test = split_paths(model.all_image_paths)
     label_train, label_test = split_paths(model.all_image_labels)
-    weight_train, weight_test = split_paths(model.label_weight_list)
+    # weight_train, weight_test = split_paths(model.label_weight_list)
 
     for i in range(EPOCHS):
         print("Starting epoch: {}".format(i + 1))
@@ -53,12 +53,10 @@ def main(_):
     print("Number of images: {}".format(num_images))
     print("Labels: {}".format(class_examples))
 
-    label_to_index = dict((name, index) for index, name in enumerate(class_examples.keys()))
-    print("label_to_index: {}".format(label_to_index))
-
-    model = Model(class_examples=class_examples,
-                  all_image_paths=all_images,
-                  label_to_index=label_to_index)
+    model = Model(
+        all_image_paths=all_images,
+        num_classes=len(class_examples.keys())
+    )
     train(model)
     print("")
 

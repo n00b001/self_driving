@@ -1,52 +1,121 @@
 import os
 import pickle
-from queue import Queue
-from threading import Thread
 
+import numpy as np
 import tensorflow as tf
-from tensorflow_estimator.python.estimator.run_config import RunConfig
+from sklearn.preprocessing import LabelBinarizer
 
-from consts import MODEL_DIR, DEFAULT_ARCHITECTURE, IMAGE_SIZE, IMAGE_DEPTH
-from file_stuff import get_random_str, get_labels, get_label_weights
+from consts import MODEL_DIR, IMAGE_SIZE, IMAGE_DEPTH
+from dataset_keras import process_image_np
+from file_stuff import get_random_str, get_labels, get_latest_dir
+# from x2_2_train_net import get_base_model, get_model
+from grab_screen import grab_screen
 
 QUEUE_SIZE = 1
+
+
+def predict_tflite(input_data, input_details, model, output_details):
+    model.set_tensor(input_details[0]['index'], input_data)
+    model.invoke()
+    output_data = model.get_tensor(output_details[0]['index'])
+    return output_data
+
+
+def get_model(base_model, num_classes):
+    # Trainable classification head
+    maxpool_layer = tf.keras.layers.GlobalMaxPooling2D()
+    prediction_layer = tf.keras.layers.Dense(num_classes, activation='softmax')
+    # Layer classification head with feature detector
+    model = tf.keras.Sequential([
+        base_model,
+        maxpool_layer,
+        prediction_layer
+    ])
+    return model
+
+
+def get_base_model():
+    print("Getting model...")
+    # # Pre-trained model with MobileNetV2
+    # base_model = tf.keras.applications.MobileNetV2(
+    #     input_shape=(IMAGE_SIZE, IMAGE_SIZE, IMAGE_DEPTH),
+    #     include_top=False,
+    #     alpha=1.0,
+    #     weights='imagenet'
+
+    # Pre-trained model with MobileNet
+    base_model = tf.keras.applications.MobileNet(
+        input_shape=(IMAGE_SIZE, IMAGE_SIZE, IMAGE_DEPTH),
+        include_top=False,
+        alpha=1.0,
+        weights='imagenet'
+    )
+    # # Pre-trained model with MobileNetV2
+    # base_model = tf.keras.applications.InceptionResNetV2(
+    #     input_shape=(IMAGE_SIZE, IMAGE_SIZE, IMAGE_DEPTH),
+    #     include_top=False,
+    #     weights='imagenet'
+    # )
+    # Freeze the pre-trained model weights
+    base_model.trainable = True
+    return base_model
+
+
+def get_empty_model(num_classes):
+    base_model = get_base_model()
+    model = get_model(base_model=base_model, num_classes=num_classes)
+    return model
+
+
+def load_model(path, num_classes):
+    model = get_empty_model(num_classes)
+    model.load_weights(path)
+    return model
 
 
 class Model:
     def __init__(
             self,
-            class_examples: dict,
-            label_to_index: dict,
-            all_image_paths,
+            all_image_paths=None,
+            num_classes=None,
+            encoder=None,
             model_path=None,
             verbose=False,
-            dropout=0.5,
             predict=False,
     ):
         if not predict and all_image_paths is None:
             raise Exception("Must give all image paths to model for training")
         self.verbose = verbose
-        self.class_examples = class_examples
-        self.label_to_index = label_to_index
         self.all_image_paths = all_image_paths
         self.model_path = model_path
-        self.model = self.get_model(
-            model_path=model_path, dropout=dropout, label_to_index=label_to_index
-        )
-
-        self.all_image_labels = get_labels(all_image_paths)
-        self.label_weight_list = get_label_weights(self.all_image_labels, self.class_examples)
+        self.encoder = encoder
 
         if predict:
-            self.input_queue = Queue(maxsize=QUEUE_SIZE)
-            self.output_queue = Queue(maxsize=QUEUE_SIZE)
+            self.encoder = pickle.load(open(model_path + "/encoder_file.p", "rb"))
+            num_classes = pickle.load(open(model_path + "/num_classes.p", "rb"))
+            self.model = self.get_model(
+                model_path=model_path, num_classes=num_classes
+            )
+
+            # self.input_queue = Queue(maxsize=QUEUE_SIZE)
+            # self.output_queue = Queue(maxsize=QUEUE_SIZE)
 
             # We set the generator thread as daemon
             # (see https://docs.python.org/3/library/threading.html#threading.Thread.daemon)
             # This means that when all other threads are dead,
             # this thread will not prevent the Python program from exiting
-            self.prediction_thread = Thread(target=self.predict_from_queue, daemon=True)
-            self.prediction_thread.start()
+            # self.prediction_thread = Thread(target=self.predict_from_queue, daemon=True)
+            # self.prediction_thread.start()
+        else:
+            encoder = LabelBinarizer()
+            self.model = self.get_model(
+                model_path=model_path, num_classes=num_classes
+            )
+            self.all_image_labels = encoder.fit_transform(get_labels(all_image_paths))
+            # self.label_weight_list = get_label_weights(self.all_image_labels, self.class_examples)
+
+            pickle.dump(encoder, open(model_path + "encoder_file.p", "wb"))
+            pickle.dump(num_classes, open(model_path + "num_classes.p", "wb"))
 
     def generate_from_queue(self):
         """ Generator which yields items from the input queue.
@@ -54,7 +123,7 @@ class Model:
         """
 
         while True:
-            yield self.input_queue.get()
+            yield process_image_np(self.input_queue.get())
 
     def predict_from_queue(self):
         """ Adds a prediction from the model to the output_queue.
@@ -69,67 +138,55 @@ class Model:
                 print('Putting in output queue')
             self.output_queue.put(i)
 
-    def predict(self, features):
-        features = dict(features)
-        self.input_queue.put(features)
-        predictions = self.output_queue.get()
+    def predict(self, features=None):
+        # self.input_queue.put(features)
+        # predictions = self.output_queue.get()
+        #
+        # output = predictions["class_ids"][0]
+        if features is None:
+            features = grab_screen()
+        output = self.model.predict(
+            np.expand_dims(process_image_np(features.astype(np.float32)), axis=0),
+            workers=8,
+            use_multiprocessing=True
+        )
+        label = self.encoder.inverse_transform(output)
+        return str(label[0])
 
-        output = predictions["class_ids"][0]
-        # todo: this will break if we use string labels
-        # label = self.index_to_label[int(output)]
-        return str(output)
+    def get_model(self, num_classes, model_path=None):
 
-    def get_model(self, label_to_index, model_path=None, dropout=0.5):
         if model_path is None:
             model_path = "./{}/{}".format(MODEL_DIR, get_random_str())
         if not os.path.exists(MODEL_DIR):
             os.mkdir(MODEL_DIR)
 
-        if not os.path.exists(model_path):
-            os.mkdir(model_path)
-            architecture = DEFAULT_ARCHITECTURE
-            with open('./{}/architecture.pkl'.format(model_path), 'wb') as f:
-                pickle.dump(architecture, f, pickle.HIGHEST_PROTOCOL)
+        if os.path.exists(model_path):
+            latest = get_latest_dir(model_path)
+            saved_model = get_latest_dir(latest)
+            paths = [
+                model_path,
+                latest,
+                saved_model,
+            ]
+            model = None
+            for p in paths:
+                try:
+                    model = tf.contrib.saved_model.load_keras_model(p)
+                    break
+                except:
+                    try:
+                        model = load_model(p, num_classes)
+                        break
+                    except:
+                        pass
+            if model is None:
+                raise Exception("Model couldn't be loaded!")
         else:
-            with open('./{}/architecture.pkl'.format(model_path), 'rb') as f:
-                architecture = pickle.load(f)
+            model = get_empty_model(num_classes)
 
         print("Model path: {}".format(model_path))
-        feature_columns = [tf.feature_column.numeric_column(
-            "x", shape=[IMAGE_SIZE, IMAGE_SIZE, IMAGE_DEPTH],
-            normalizer_fn=lambda x: tf.math.divide(x, 255)
-        )]
-
-        r = RunConfig(
-            # log_step_count_steps=50,
-            log_step_count_steps=500,
-            save_summary_steps=1_000,
-            keep_checkpoint_max=2,
-        )
-
-        # classifier = mobilenetv2.get_estimator(
-        #     model_dir=model_path, num_classes=len(self.index_to_label.keys())
-        # )
-        classifier = self.get_estimator(architecture, dropout, feature_columns, model_path, label_to_index, r)
         self.model_path = model_path
-        return classifier
-
-    def get_estimator(self, architecture, dropout, feature_columns, model_path, label_to_index, r):
-        weight = tf.feature_column.numeric_column('w')
-        label_list = list(label_to_index.keys())
-        classifier = tf.estimator.DNNClassifier(
-            feature_columns=feature_columns,
-            hidden_units=architecture,
-            optimizer=tf.train.AdamOptimizer(1e-3),
-            n_classes=len(label_list),
-            activation_fn=tf.nn.leaky_relu,
-            dropout=dropout,
-            model_dir=model_path,
-            config=r,
-            weight_column=weight,
-            label_vocabulary=label_list
-        )
-        return classifier
+        return model
 
     def queued_predict_input_fn(self):
         """

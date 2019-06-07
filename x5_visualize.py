@@ -1,21 +1,14 @@
+import os
 import re
 
 import cv2
 import numpy as np
 import tensorflow as tf
-from matplotlib import pyplot as plt
 
+from consts import IMAGE_SIZE
 from dataset_keras import process_image_np
 from grab_screen import grab_screen
-from x2_2_train_net import get_base_model, get_model
-
-
-def load_model(path):
-    num_classes = 9
-    base_model = get_base_model()
-    model = get_model(base_model=base_model, num_classes=num_classes)
-    model.load_weights(path)
-    return model
+from model import load_model, Model
 
 
 def get_layer_by_name(model, layer_name):
@@ -27,60 +20,42 @@ def get_layer_by_name(model, layer_name):
         raise Exception(f"Can't find: {layer_name}")
 
 
-def show_all_layers(intersting_layers, activations, img):
-    layer_names = [x.name for x in intersting_layers]
-    average_layer_images = []
-    shape = img.shape[:-1]
+def show_all_layers(activations, img, shape):
+    average_layer_image = np.mean([
+        cv2.resize(np.mean(a, axis=-1)[0], dsize=(shape[1], shape[0])) for a in activations
+    ], axis=0)
+    normalized = (average_layer_image - average_layer_image.min()) / (
+    average_layer_image.max() - average_layer_image.min())
 
-    images_per_row = 16
+    heatmap = np.uint8(255 * normalized)
 
-    for layer_name, layer_activation in zip(layer_names, activations):  # Displays the feature maps
-        n_features = layer_activation.shape[-1]  # Number of features in the feature map
-        n_cols = n_features // images_per_row  # Tiles the activation channels in this matrix
-        dimentions = len(layer_activation.shape)
-        all_layer_images = []
-        for col in range(n_cols):  # Tiles each filter into a big horizontal grid
-            for row in range(images_per_row):
-                if dimentions == 4:
-                    channel_image = layer_activation[0, :, :, col * images_per_row + row]
-                elif dimentions == 3:
-                    channel_image = layer_activation[:, :, col * images_per_row + row]
-                else:
-                    raise Exception(f"Unexpected dimentionality: {dimentions}")
-
-                channel_image -= channel_image.mean()  # Post-processes the feature to make it visually palatable
-                channel_image /= channel_image.std()
-                channel_image *= 64
-                channel_image += 128
-                channel_image = np.clip(channel_image, 0, 255).astype('uint8')
-                all_layer_images.append(channel_image)
-        all_layer_images = np.array(all_layer_images)
-        average_layer_image = np.average(all_layer_images, axis=0)
-        resized_average = cv2.resize(average_layer_image, dsize=(shape[1], shape[0]), interpolation=cv2.INTER_AREA)
-        average_layer_images.append(resized_average)
-    average_layer_images_np = np.array(average_layer_images)
-    average_feature_map = np.average(average_layer_images_np, axis=0).astype(np.uint8)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-    plt.imshow(img, aspect='auto', interpolation='none')
-    plt.imshow(average_feature_map, aspect='auto', interpolation='none', cmap='plasma', alpha=0.3)
-    plt.draw()
-    plt.pause(0.1)
+    heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+    superimposed_img = cv2.addWeighted(img, 0.6, heatmap, 0.4, 0)
+    cv2.imshow("Original", img)
+    cv2.imshow("Main", superimposed_img)
+    cv2.waitKey(1)
 
 
-def heatmap_3(model):
-    # base_model = model.layers[0]
-    # intersting_layers = []
+def heatmap_3(model:Model, img_path=None):
+    base_model = model.model.layers[0]
+    intersting_layers = []
+
+    # incepotionresnet
     # reg = "block_.*relu"
     # for l in model.layers[0].layers[100:135]:
     #     if re.match(reg, l.name):
     #         intersting_layers.append(l)
 
-    base_model = model.layers[0]
-    intersting_layers = []
+    # mobilenetv2
     # reg = "conv2d_.*"
-    reg = "activation_.*"
-    for l in model.layers[0].layers:
+    # reg = "activation_.*"
+    # for l in model.layers[0].layers:
+    #     if re.match(reg, l.name):
+    #         intersting_layers.append(l)
+
+    # mobilenetv1
+    reg = ".*relu"
+    for l in base_model.layers:
         if re.match(reg, l.name):
             intersting_layers.append(l)
     if len(intersting_layers) == 0:
@@ -92,27 +67,54 @@ def heatmap_3(model):
     activation_model = tf.keras.models.Model(
         inputs=base_model.input, outputs=layer_outputs
     )
-
+    cv2.namedWindow("Main", cv2.WINDOW_NORMAL)
+    cv2.namedWindow("Original", cv2.WINDOW_NORMAL)
+    if type(img_path) == list:
+        for x in img_path:
+            show_activations(activation_model, x)
+        cv2.waitKey(1) & 0xFF
+        exit(0)
     while True:
+        show_activations(activation_model, img_path)
+
+
+def show_activations(activation_model, img_path):
+    if img_path is None:
         scr = grab_screen()
-        img = process_image_np(scr.astype(np.float32))
-        expanded_img = np.expand_dims(img, axis=0)
+    else:
+        scr = cv2.imread(img_path)
+    scr = cv2.resize(scr, (IMAGE_SIZE, IMAGE_SIZE))
 
-        activations = activation_model.predict(expanded_img)
-        # Returns a list of five Numpy arrays: one array per layer activation
-
-        show_all_layers(intersting_layers, activations, scr)
+    img = np.expand_dims(process_image_np(scr.astype(np.float32)), axis=0)
+    activations = activation_model.predict(img)
+    show_all_layers(activations, scr, scr.shape[:-1])
+    if img_path is not None:
+        cv2.waitKey(0)
 
 
 def main():
-    img_path = "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\data\\W\\AAAOYAZVNA_2.jpg"
-    # img_path = "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\data\\W\\AAACBGIXKK.jpg"
-    # model_path = "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\models\\IDBULYIUOJ\\fine_weights_epoch_4\\1558129135" # mobilenetv2
-    model_path = "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\models\\BQPEMNVUJT\\fine_weights_epoch_11\\1558707601" # inceptionRestnmet
-    output_path = "."
-    model = tf.contrib.saved_model.load_keras_model(model_path)
+    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+    img_path = [
+        "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\data\\W\\AAAOYAZVNA_2.jpg",
+        "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\data\\W\\AAACBGIXKK.jpg",
+        "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\data\\A\\AAAOYAZVNA_55.jpg",
+        "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\data\\A\\AAAHWYBLNQ.jpg",
+        "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\data\\D\\AAAOYAZVNA_44.jpg",
+        "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\data\\D\\AAIRLVGYTB.jpg",
+        "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\data\\S\\ABRFGAESDR_159.jpg",
+        "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\data\\S\\ABOVZDNNBB.jpg",
+    ]
 
-    heatmap_3(model)
+    model_path = "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\models\\JCJYWJIYEI\\fine_weights_epoch_0_13\\1559831114"
+    model_path = "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\models\\TSZIATHCIA"
+    # model_path = "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\models\\TSZIATHCIA\\fine_weights_epoch_0_13\\1559916282"
+    model = Model(
+        model_path=model_path,
+        predict=True
+    )
+
+    heatmap_3(model, img_path=None)
+    # heatmap_3(model, img_path=img_path)
 
 
 if __name__ == '__main__':
