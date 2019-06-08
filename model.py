@@ -99,7 +99,7 @@ class Model:
         self.model.summary()
         self.model.compile(
             loss='categorical_crossentropy',
-            optimizer=Adam(learning_rate=LEARNING_RATE),
+            optimizer=tf.keras.optimizers.Adam(lr=LEARNING_RATE, decay=1e-10),
             # optimizer=tf.train.AdamOptimizer(learning_rate=lr_finetune),
             metrics=['accuracy']
         )
@@ -149,7 +149,7 @@ class Model:
             use_multiprocessing=True
         )
 
-        tf.contrib.saved_model.save_keras_model(self.model, self.model_path + "/saved_model")
+        tf.contrib.saved_model.save_keras_model(self.model, self.model_path)
         return history
 
     def load_or_create_model(self, num_classes):

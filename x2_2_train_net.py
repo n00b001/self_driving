@@ -11,9 +11,9 @@ from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils import class_weight
 from tensorflow.python.keras.optimizer_v2.adam import Adam
 
-from consts import IMAGE_SIZE, EPOCHS, IMAGE_DEPTH, BATCH_SIZE, MODEL_DIR, FINE_TUNE_EPOCHS, LEARNING_RATE
-from dataset_keras import process_image_np
-from file_stuff import get_paths_and_count, get_labels, split_paths, get_label_weights, get_latest_dir
+from consts import IMAGE_SIZE, EPOCHS, IMAGE_DEPTH, BATCH_SIZE, MODEL_DIR, LEARNING_RATE
+from dataset_keras import process_image_np, get_datasets
+from file_stuff import get_paths_and_count, get_labels, get_label_weights, get_latest_dir
 from grab_screen import grab_screen
 from x1_collect_data import fps_stuff2
 from x3_inferance import press_label
@@ -208,14 +208,11 @@ def predict_tflite(input_data, input_details, model, output_details):
 
 
 def main():
-    # Increase training epochs for fine-tuning
-    total_epochs = EPOCHS + FINE_TUNE_EPOCHS
 
     random_str = "TSZIATHCIA"
     model_base_dir = os.path.join(MODEL_DIR, random_str)
     os.makedirs(model_base_dir, exist_ok=True)
     model_path = os.path.join(MODEL_DIR, random_str, f'weights_epoch_{EPOCHS}')
-    fine_model_path = os.path.join(MODEL_DIR, random_str, f'fine_weights_epoch_0_{total_epochs}')
 
     tensorboard_callback = tf.keras.callbacks.TensorBoard(
         log_dir=model_base_dir,
@@ -238,8 +235,8 @@ def main():
     num_classes_file = os.path.join(MODEL_DIR, random_str, "num_classes.p")
 
     # if True:
-    if False and not os.path.exists(fine_model_path):
-        print(f"{fine_model_path} doesn't exist...")
+    if not os.path.exists(model_path):
+        print(f"{model_path} doesn't exist...")
         all_images, class_examples = get_paths_and_count()
 
         num_classes = len(class_examples.keys())
@@ -253,30 +250,25 @@ def main():
         pickle.dump(encoder, open(encoder_file, "wb"))
         pickle.dump(num_classes, open(num_classes_file, "wb"))
 
-        train_ds, test_ds = get_datasets(all_images, transfomed_label)
-
-        xtr, xte = split_paths(all_images)
-        steps_per_epoch = round(len(xtr)) // BATCH_SIZE
-        val_steps = round(len(xte)) // BATCH_SIZE
+        train_ds, test_ds, steps_per_epoch, val_steps = get_datasets(all_images, transfomed_label)
         print(f"Steps per epoch: {steps_per_epoch}")
 
-        if not os.path.exists(model_path):
-            print(f"Tuning {model_path}...")
-            base_model = get_base_model()
-            model = get_model(base_model=base_model, num_classes=num_classes)
-            model = setup_for_fine_tune(base_model, learning_rate=LEARNING_RATE, model=model)
-            for i in range(10):
-                fine_model_path = os.path.join(MODEL_DIR, random_str, f'fine_weights_epoch_{i}_{total_epochs}')
-                history2 = fine_tune(
-                    model, train_ds, test_ds, steps_per_epoch, total_epochs,
-                    fine_model_path, tensorboard_callback, weights, class_weights,
-                    val_steps, checkpoint
-                )
+        print(f"Tuning {model_path}...")
+        base_model = get_base_model()
+        model = get_model(base_model=base_model, num_classes=num_classes)
+        model = setup_for_fine_tune(base_model, learning_rate=LEARNING_RATE, model=model)
+        for i in range(10):
+            fine_model_path = os.path.join(MODEL_DIR, random_str, f'fine_weights_epoch_{i}_{EPOCHS}')
+            history2 = fine_tune(
+                model, train_ds, test_ds, steps_per_epoch, EPOCHS,
+                fine_model_path, tensorboard_callback, weights, class_weights,
+                val_steps, checkpoint
+            )
 
     encoder = pickle.load(open(encoder_file, "rb"))
     num_classes = pickle.load(open(num_classes_file, "rb"))
     print(f"Predicting {fine_model_path}...")
-    predict(fine_model_path, num_classes=num_classes, encoder=encoder)
+    predict(model_path, num_classes=num_classes, encoder=encoder)
 
 
 def get_class_weights(y, smooth_factor=0):

@@ -2,11 +2,12 @@ import os
 import pathlib
 import random
 import string
+from math import ceil
 from multiprocessing import Process
 
 import cv2
 
-from consts import DATA_DIR, LOG_DIR
+from consts import DATA_DIR, LOG_DIR, MAX_IMAGES
 
 if not os.path.exists(DATA_DIR):
     os.mkdir(DATA_DIR)
@@ -71,6 +72,7 @@ def get_latest_dir(direct):
 
 
 def get_paths_and_count():
+    max_imgs = MAX_IMAGES
     print("Getting paths and count...")
     data_root = pathlib.Path(DATA_DIR)
     label_names = [item for item in data_root.glob('*/') if item.is_dir()]
@@ -78,18 +80,36 @@ def get_paths_and_count():
         d.name: [f for f in d.glob("*") if is_good_data(f)]
         for d in label_names
     }
+
+    del all_file_names["NO"]
+
     class_examples = {k: len(v) for k, v in all_file_names.items()}
     threshold = max(class_examples.values()) * 0.01
     for k, v in class_examples.items():
         if v < threshold:
             del all_file_names[k]
+
+    use_max_imgs(all_file_names, max_imgs)
+
     class_examples = {k: len(v) for k, v in all_file_names.items()}
 
     all_image_paths = []
     for x in all_file_names.values():
         all_image_paths.extend([str(y) for y in x])
     random.shuffle(all_image_paths)
+    print(f"Number of images: {len(all_image_paths)}")
     return all_image_paths, class_examples
+
+
+def use_max_imgs(all_file_names, max_imgs):
+    # if max_imgs is None:
+    #     max_imgs = min([len(v) for v in all_file_names.values()])
+    if max_imgs is not None:
+        images_per_class = ceil(max_imgs / float(len(all_file_names.keys())))
+        for k, v in all_file_names.items():
+            images = all_file_names[k]
+            random.shuffle(images)
+            all_file_names[k] = images[:images_per_class]
 
 
 def get_labels(all_image_paths):

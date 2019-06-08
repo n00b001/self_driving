@@ -4,7 +4,7 @@ import traceback
 
 import tensorflow as tf
 
-from consts import EPOCHS, CACHE_LOCATION
+from consts import EPOCHS, CACHE_LOCATION, LEARNING_RATE
 from file_stuff import get_paths_and_count, split_paths
 from model import Model
 
@@ -13,21 +13,25 @@ random.seed = 1337
 
 
 def main(_):
-    os.makedirs(CACHE_LOCATION, exist_ok=True)
-    all_images, class_examples = get_paths_and_count()
-    train_ds, test_ds = split_paths(all_images)
+    model_path = None
+    while True:
+        os.makedirs(CACHE_LOCATION, exist_ok=True)
+        all_images, class_examples = get_paths_and_count()
+        train_ds, test_ds = split_paths(all_images)
 
-    print("Test size: {}".format(len(test_ds)))
-    print("Train size: {}".format(len(train_ds)))
-    num_images = len(all_images)
-    print("Number of images: {}".format(num_images))
-    print("Labels: {}".format(class_examples))
+        print("Test size: {}".format(len(test_ds)))
+        print("Train size: {}".format(len(train_ds)))
+        num_images = len(all_images)
+        print("Number of images: {}".format(num_images))
+        print("Labels: {}".format(class_examples))
 
-    model = Model(
-        all_image_paths=all_images,
-        num_classes=len(class_examples.keys())
-    )
-    model.train(EPOCHS)
+        model = Model(
+            all_image_paths=all_images,
+            num_classes=len(class_examples.keys()),
+            model_path=model_path
+        )
+        model.train(EPOCHS)
+        model_path = model.model_path
     print("")
 
 

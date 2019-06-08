@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 from tensorflow.python.data.experimental import AUTOTUNE
 from tensorflow.python.ops.image_ops_impl import ResizeMethod
 
-from consts import IMAGE_SIZE, BATCH_SIZE, SHUFFLE_BUFFER
+from consts import IMAGE_SIZE, BATCH_SIZE
 from file_stuff import split_paths
 
 
@@ -22,12 +22,12 @@ def get_raw_ds(all_image_labels, all_image_paths, is_training):
         map_func=load_image,
         num_parallel_calls=os.cpu_count()
     )
-    if is_training:
-        ds = ds.map(
-            map_func=img_augmentation,
-            num_parallel_calls=os.cpu_count()
-        )
-        ds = ds.shuffle(SHUFFLE_BUFFER)
+    # if is_training:
+    #     ds = ds.map(
+    #         map_func=img_augmentation,
+    #         num_parallel_calls=os.cpu_count()
+    #     )
+    # ds = ds.shuffle(SHUFFLE_BUFFER)
     ds = ds.apply(tf.data.experimental.map_and_batch(
         map_func=preprocess_from_path_label,
         batch_size=BATCH_SIZE,
@@ -74,10 +74,9 @@ def get_datasets(x, y):
         all_image_labels=yte
     )
 
-    steps_per_epoch = round(len(xtr)) // BATCH_SIZE
-    steps_per_epoch = 10
+    steps_per_epoch = int(np.ceil(len(xtr) / float(BATCH_SIZE)))
 
-    val_steps = round(len(xte)) // BATCH_SIZE
+    val_steps = int(np.ceil(len(xte) / float(BATCH_SIZE)))
 
     return train_ds, test_ds, steps_per_epoch, val_steps
 
