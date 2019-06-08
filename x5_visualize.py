@@ -8,7 +8,7 @@ import tensorflow as tf
 from consts import IMAGE_SIZE
 from dataset_keras import process_image_np
 from grab_screen import grab_screen
-from model import load_model, Model
+from model import Model
 
 
 def get_layer_by_name(model, layer_name):
@@ -24,8 +24,8 @@ def show_all_layers(activations, img, shape):
     average_layer_image = np.mean([
         cv2.resize(np.mean(a, axis=-1)[0], dsize=(shape[1], shape[0])) for a in activations
     ], axis=0)
-    normalized = (average_layer_image - average_layer_image.min()) / (
-    average_layer_image.max() - average_layer_image.min())
+    normalized = (average_layer_image - average_layer_image.min()) \
+                 / (average_layer_image.max() - average_layer_image.min())
 
     heatmap = np.uint8(255 * normalized)
 
@@ -36,7 +36,7 @@ def show_all_layers(activations, img, shape):
     cv2.waitKey(1)
 
 
-def heatmap_3(model:Model, img_path=None):
+def heatmap_3(model: Model, images_list=None):
     base_model = model.model.layers[0]
     intersting_layers = []
 
@@ -67,15 +67,16 @@ def heatmap_3(model:Model, img_path=None):
     activation_model = tf.keras.models.Model(
         inputs=base_model.input, outputs=layer_outputs
     )
+
     cv2.namedWindow("Main", cv2.WINDOW_NORMAL)
     cv2.namedWindow("Original", cv2.WINDOW_NORMAL)
-    if type(img_path) == list:
-        for x in img_path:
+    if images_list is not None:
+        for x in images_list:
             show_activations(activation_model, x)
         cv2.waitKey(1) & 0xFF
         exit(0)
     while True:
-        show_activations(activation_model, img_path)
+        show_activations(activation_model, images_list)
 
 
 def show_activations(activation_model, img_path):
@@ -94,7 +95,7 @@ def show_activations(activation_model, img_path):
 
 def main():
     os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-    img_path = [
+    images_list = [
         "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\data\\W\\AAAOYAZVNA_2.jpg",
         "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\data\\W\\AAACBGIXKK.jpg",
         "C:\\Users\\xfant\\PycharmProjects\\self_driving2\\data\\A\\AAAOYAZVNA_55.jpg",
@@ -113,8 +114,8 @@ def main():
         predict=True
     )
 
-    heatmap_3(model, img_path=None)
-    # heatmap_3(model, img_path=img_path)
+    heatmap_3(model, images_list=None)
+    # heatmap_3(model, images_list=images_list)
 
 
 if __name__ == '__main__':

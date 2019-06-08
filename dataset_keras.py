@@ -8,6 +8,7 @@ from tensorflow.python.data.experimental import AUTOTUNE
 from tensorflow.python.ops.image_ops_impl import ResizeMethod
 
 from consts import IMAGE_SIZE, BATCH_SIZE, SHUFFLE_BUFFER
+from file_stuff import split_paths
 
 
 def load_image(path, label):
@@ -57,6 +58,28 @@ def process_image_np(image):
     new_image = np.divide(new_image, pixel_value_scale)
 
     return new_image
+
+
+def get_datasets(x, y):
+    xtr, xte = split_paths(x)
+    ytr, yte = split_paths(y)
+    train_ds = get_raw_ds(
+        is_training=True,
+        all_image_paths=xtr,
+        all_image_labels=ytr
+    )
+    test_ds = get_raw_ds(
+        is_training=False,
+        all_image_paths=xte,
+        all_image_labels=yte
+    )
+
+    steps_per_epoch = round(len(xtr)) // BATCH_SIZE
+    steps_per_epoch = 10
+
+    val_steps = round(len(xte)) // BATCH_SIZE
+
+    return train_ds, test_ds, steps_per_epoch, val_steps
 
 
 def img_augmentation(x, label):

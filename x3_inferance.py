@@ -6,7 +6,7 @@ from direct_keys import PressKey, ReleaseKey, W, A, S, D
 from model import Model
 from x1_collect_data import fps_stuff2
 
-simulate = False
+simulate = True
 model: Model = None
 last_print_time = time.time()
 
@@ -82,8 +82,8 @@ def press_label(label):
         ReleaseKey(A)
         ReleaseKey(S)
         ReleaseKey(D)
-    # time.sleep(0.05)
-    # release_all()
+        # time.sleep(0.05)
+        # release_all()
 
 
 def main(_):

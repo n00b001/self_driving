@@ -12,8 +12,8 @@ from sklearn.utils import class_weight
 from tensorflow.python.keras.optimizer_v2.adam import Adam
 
 from consts import IMAGE_SIZE, EPOCHS, IMAGE_DEPTH, BATCH_SIZE, MODEL_DIR, FINE_TUNE_EPOCHS, LEARNING_RATE
-from dataset_keras import get_raw_ds, process_image_np
-from file_stuff import get_paths_and_count, get_labels, split_paths, get_label_weights, get_random_str, get_latest_dir
+from dataset_keras import process_image_np
+from file_stuff import get_paths_and_count, get_labels, split_paths, get_label_weights, get_latest_dir
 from grab_screen import grab_screen
 from x1_collect_data import fps_stuff2
 from x3_inferance import press_label
@@ -211,7 +211,6 @@ def main():
     # Increase training epochs for fine-tuning
     total_epochs = EPOCHS + FINE_TUNE_EPOCHS
 
-    random_str = get_random_str()
     random_str = "TSZIATHCIA"
     model_base_dir = os.path.join(MODEL_DIR, random_str)
     os.makedirs(model_base_dir, exist_ok=True)
@@ -303,22 +302,6 @@ def get_class_weights(y, smooth_factor=0):
     majority = max(counter.values())
 
     return {cls: float(majority) / count for cls, count in counter.items()}
-
-
-def get_datasets(x, y):
-    xtr, xte = split_paths(x)
-    ytr, yte = split_paths(y)
-    train_ds = get_raw_ds(
-        is_training=True,
-        all_image_paths=xtr,
-        all_image_labels=ytr
-    )
-    test_ds = get_raw_ds(
-        is_training=False,
-        all_image_paths=xte,
-        all_image_labels=yte
-    )
-    return train_ds, test_ds
 
 
 if __name__ == '__main__':

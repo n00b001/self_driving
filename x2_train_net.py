@@ -4,42 +4,12 @@ import traceback
 
 import tensorflow as tf
 
-from consts import EPOCHS, MAX_TRAINING_STEPS, CACHE_LOCATION
-from dataset import get_initialized_dataset
+from consts import EPOCHS, CACHE_LOCATION
 from file_stuff import get_paths_and_count, split_paths
 from model import Model
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 random.seed = 1337
-
-
-def train(model: Model):
-    path_train, path_test = split_paths(model.all_image_paths)
-    label_train, label_test = split_paths(model.all_image_labels)
-    # weight_train, weight_test = split_paths(model.label_weight_list)
-
-    for i in range(EPOCHS):
-        print("Starting epoch: {}".format(i + 1))
-        train_spec = tf.estimator.TrainSpec(
-            input_fn=lambda: get_initialized_dataset(
-                is_training=True,
-                all_image_paths=path_train,
-                all_image_labels=label_train,
-                label_weight_list=weight_train,
-            ),
-            max_steps=MAX_TRAINING_STEPS,
-        )
-
-        eval_spec = tf.estimator.EvalSpec(
-            input_fn=lambda: get_initialized_dataset(
-                is_training=False,
-                all_image_paths=path_test,
-                all_image_labels=label_test,
-            ),
-            steps=None,
-        )
-        stats = tf.estimator.train_and_evaluate(model.model, train_spec, eval_spec)
-        print("Stats: {}".format(stats))
 
 
 def main(_):
@@ -57,7 +27,7 @@ def main(_):
         all_image_paths=all_images,
         num_classes=len(class_examples.keys())
     )
-    train(model)
+    model.train(EPOCHS)
     print("")
 
 
