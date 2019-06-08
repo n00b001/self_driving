@@ -9,6 +9,7 @@ from file_stuff import get_paths_and_count, split_paths
 from model import Model
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+# os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 random.seed = 1337
 
 
