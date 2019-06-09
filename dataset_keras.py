@@ -22,11 +22,11 @@ def get_raw_ds(all_image_labels, all_image_paths, is_training):
         map_func=load_image,
         num_parallel_calls=os.cpu_count()
     )
-    # if is_training:
-    #     ds = ds.map(
-    #         map_func=img_augmentation,
-    #         num_parallel_calls=os.cpu_count()
-    #     )
+    if is_training:
+        ds = ds.map(
+            map_func=img_augmentation,
+            num_parallel_calls=os.cpu_count()
+        )
     # ds = ds.shuffle(SHUFFLE_BUFFER)
     ds = ds.apply(tf.data.experimental.map_and_batch(
         map_func=preprocess_from_path_label,
@@ -87,10 +87,21 @@ def img_augmentation(x, label):
     #     # todo: always seems to produce same quality
     #     x = tf.image.random_jpeg_quality(x, 30, 100)
     x_new = tf.cast(x, tf.dtypes.float32)
-    x_new = tf.image.random_brightness(x_new, 0.5)
-    x_new = tf.image.random_contrast(x_new, 0.4, 1.4)
+
+    # x_new = tf.image.random_brightness(x_new, 0.5)
+    # x_new = tf.image.random_contrast(x_new, 0.4, 1.4)
+    x_new = cut_out_lower_part_randomly(x_new, 0.5)
+    # x_new = tf.image.random_hue(x_new, 0.06)
+    # x_new = tf.image.random_saturation(x_new, 0.1, 1.9)
+    # x_new += tf.random_normal(shape=tf.shape(x_new), mean=0, stddev=10, dtype=x_new.dtype)
+
+    x = tf.cast(tf.clip_by_value(x_new, 0, 255), x.dtype)
+    return x, label
+
+
+def cut_out_lower_part_randomly(x_new, chance):
     p_order = tf.random_uniform(shape=[], minval=0., maxval=1., dtype=tf.float32)
-    pred = tf.less(p_order, 0.5)
+    pred = tf.less(p_order, chance)
 
     def set_lower_part_of_image_to_black():
         # shape of images is (IMG_SIZE, IMG_SIZE, IMG_DEPTH)
@@ -118,11 +129,7 @@ def img_augmentation(x, label):
         return x_new
 
     x_new = tf.cond(pred, set_lower_part_of_image_to_black, just_return)
-    x_new = tf.image.random_hue(x_new, 0.06)
-    x_new = tf.image.random_saturation(x_new, 0.1, 1.9)
-    x_new += tf.random_normal(shape=tf.shape(x_new), mean=0, stddev=10, dtype=x_new.dtype)
-    x = tf.cast(tf.clip_by_value(x_new, 0, 255), x.dtype)
-    return x, label
+    return x_new
 
 
 def preprocess_from_path_label(image, label):
