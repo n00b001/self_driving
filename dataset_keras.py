@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 from matplotlib import pyplot as plt
 from tensorflow.python.data.experimental import AUTOTUNE
-from tensorflow.python.ops.image_ops_impl import ResizeMethod
+from tensorflow.python.ops.image_ops_impl import ResizeMethod, convert_image_dtype
 
 from consts import IMAGE_SIZE, BATCH_SIZE
 from file_stuff import split_paths
@@ -86,20 +86,27 @@ def img_augmentation(x, label):
     # if np.random.uniform(0, 1) < thresh:
     #     # todo: always seems to produce same quality
     #     x = tf.image.random_jpeg_quality(x, 30, 100)
-    x_new = tf.cast(x, tf.dtypes.float32)
 
-    # x_new = tf.image.random_brightness(x_new, 0.5)
-    # x_new = tf.image.random_contrast(x_new, 0.4, 1.4)
+    x_new = tf.image.random_brightness(x, 0.5)
+    x_new = tf.image.random_contrast(x_new, 0.4, 1.4)
     x_new = cut_out_lower_part_randomly(x_new, 0.5)
-    # x_new = tf.image.random_hue(x_new, 0.06)
-    # x_new = tf.image.random_saturation(x_new, 0.1, 1.9)
-    # x_new += tf.random_normal(shape=tf.shape(x_new), mean=0, stddev=10, dtype=x_new.dtype)
+    x_new = tf.image.random_hue(x_new, 0.06)
+    x_new = tf.image.random_saturation(x_new, 0.1, 1.9)
+    # x_new = add_gausian_noise(x_new)
 
-    x = tf.cast(tf.clip_by_value(x_new, 0, 255), x.dtype)
-    return x, label
+    return x_new, label
+
+
+def add_gausian_noise(x_new):
+    dtype = x_new.dtype
+    flt_image = convert_image_dtype(x_new, tf.dtypes.float32)
+    x_new += tf.random_normal(shape=tf.shape(flt_image), mean=0, stddev=-.1, dtype=x_new.dtype)
+    return tf.image.convert_image_dtype(x_new, dtype, saturate=True)
 
 
 def cut_out_lower_part_randomly(x_new, chance):
+    dtype = x_new.dtype
+    x_new = convert_image_dtype(x_new, tf.dtypes.float32)
     p_order = tf.random_uniform(shape=[], minval=0., maxval=1., dtype=tf.float32)
     pred = tf.less(p_order, chance)
 
@@ -129,7 +136,7 @@ def cut_out_lower_part_randomly(x_new, chance):
         return x_new
 
     x_new = tf.cond(pred, set_lower_part_of_image_to_black, just_return)
-    return x_new
+    return tf.image.convert_image_dtype(x_new, dtype, saturate=True)
 
 
 def preprocess_from_path_label(image, label):
